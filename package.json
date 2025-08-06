@@ -1,0 +1,78 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "kube-context-manager",
+  "title": "Kubernetes Context Manager",
+  "description": "Efficiently manage Kubernetes contexts from Raycast",
+  "icon": "k8s.png",
+  "author": "sebastian_andrei_roman",
+  "categories": [
+    "Developer Tools"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "list-contexts",
+      "title": "List Contexts",
+      "description": "List all available Kubernetes contexts",
+      "mode": "view"
+    },
+    {
+      "name": "switch-context",
+      "title": "Switch Context",
+      "description": "Switch to a selected Kubernetes context",
+      "mode": "view"
+    },
+    {
+      "name": "current-context",
+      "title": "Current Context",
+      "description": "Show current Kubernetes context",
+      "mode": "view"
+    },
+    {
+      "name": "switch-context-namespace",
+      "title": "Switch Context with Namespace",
+      "description": "Switch context and select namespace in one flow",
+      "mode": "view"
+    },
+    {
+      "name": "manage-namespaces",
+      "title": "Manage Namespaces",
+      "description": "Set and manage namespaces for contexts",
+      "mode": "view"
+    },
+    {
+      "name": "advanced-search",
+      "title": "Advanced Context Search",
+      "description": "Advanced search and filtering for Kubernetes contexts",
+      "mode": "view"
+    },
+    {
+      "name": "kubeconfig-test",
+      "title": "Test Context Manager",
+      "description": "Test context management functionality",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.83.2",
+    "@raycast/utils": "^1.17.0",
+    "@types/js-yaml": "^4.0.9",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.11",
+    "@types/node": "20.8.10",
+    "@types/react": "18.3.3",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "prepublishOnly": "echo \"\\n\\nIt seems like you are trying to publish the Raycast extension to npm.\\n\\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\\n\\n\" && exit 1",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
