@@ -45,12 +45,6 @@
       "title": "Advanced Context Search",
       "description": "Advanced search and filtering for Kubernetes contexts",
       "mode": "view"
-    },
-    {
-      "name": "kubeconfig-test",
-      "title": "Test Context Manager",
-      "description": "Test context management functionality",
-      "mode": "view"
     }
   ],
   "dependencies": {

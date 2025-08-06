@@ -20,7 +20,7 @@ This is a **functional** Raycast extension for managing Kubernetes contexts. The
 ### **Direct Kubeconfig Approach** (Primary - WORKING)
 - **`src/utils/kubeconfig-direct.ts`** - Direct YAML file manipulation
 - **`src/hooks/useKubeconfig.ts`** - React hooks for kubeconfig operations
-- **`src/kubeconfig-test.tsx`** - Working test command with context switching
+
 - **No kubectl dependency** - bypasses all PATH/execution issues
 
 ### **Alternative kubectl Approaches** (Backup - Had Issues)  
@@ -48,7 +48,7 @@ src/
 │   └── errors.ts                # Error handling and user feedback
 ├── types/
 │   └── index.ts                 # TypeScript interfaces
-├── kubeconfig-test.tsx          # WORKING test command (try this!)
+
 └── [various test commands]
 ```
 
@@ -74,12 +74,14 @@ src/
 - `switchToContext(name)` - Switch to different context ✅ **WORKS**
 - `setContextNamespace(ctx, ns)` - Set namespace for context
 
-## Testing Commands Available
+## Production Commands Available
 
-1. **"Kubeconfig Direct Test"** ⭐ **RECOMMENDED** - Working context management
-2. **"Simple kubectl Test"** - Basic kubectl discovery without hooks
-3. **"Debug kubectl Hooks"** - kubectl path discovery testing
-4. Various other test commands for debugging
+1. **"List Contexts"** - Enhanced context listing with search and filtering
+2. **"Switch Context"** - Dedicated context switching interface
+3. **"Current Context"** - Display current context with quick actions
+4. **"Switch Context with Namespace"** - Two-step context + namespace workflow
+5. **"Manage Namespaces"** - Comprehensive namespace management
+6. **"Advanced Context Search"** - Full-featured search with relevance scoring
 
 ## Development Considerations
 

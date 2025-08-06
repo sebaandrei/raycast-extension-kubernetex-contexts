@@ -25,8 +25,6 @@ declare namespace Preferences {
   export type ManageNamespaces = ExtensionPreferences & {}
   /** Preferences accessible in the `advanced-search` command */
   export type AdvancedSearch = ExtensionPreferences & {}
-  /** Preferences accessible in the `kubeconfig-test` command */
-  export type KubeconfigTest = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
@@ -42,7 +40,5 @@ declare namespace Arguments {
   export type ManageNamespaces = {}
   /** Arguments passed to the `advanced-search` command */
   export type AdvancedSearch = {}
-  /** Arguments passed to the `kubeconfig-test` command */
-  export type KubeconfigTest = {}
 }
 
