@@ -25,7 +25,7 @@ function SetNamespaceForm({ contextName, currentNamespace, availableNamespaces, 
           <Action
             title="Cancel"
             onAction={onCancel}
-            shortcut={{ modifiers: ["cmd"], key: "w" }}
+            shortcut={{ modifiers: ["cmd"], key: "t" }}
           />
         </ActionPanel>
       }

@@ -76,12 +76,11 @@ src/
 
 ## Production Commands Available
 
-1. **"List Contexts"** - Enhanced context listing with search and filtering
-2. **"Switch Context"** - Dedicated context switching interface
-3. **"Current Context"** - Display current context with quick actions
-4. **"Switch Context with Namespace"** - Two-step context + namespace workflow
-5. **"Manage Namespaces"** - Comprehensive namespace management
-6. **"Advanced Context Search"** - Full-featured search with relevance scoring
+1. **"List Contexts"** - Enhanced context listing with search, filtering, and context switching
+2. **"Current Context"** - Display current context with quick actions
+3. **"Switch Context with Namespace"** - Two-step context + namespace workflow
+4. **"Manage Namespaces"** - Comprehensive namespace management
+5. **"Advanced Context Search"** - Full-featured search with relevance scoring
 
 ## Development Considerations
 

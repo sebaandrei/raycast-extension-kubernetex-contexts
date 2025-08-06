@@ -15,8 +15,6 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `list-contexts` command */
   export type ListContexts = ExtensionPreferences & {}
-  /** Preferences accessible in the `switch-context` command */
-  export type SwitchContext = ExtensionPreferences & {}
   /** Preferences accessible in the `current-context` command */
   export type CurrentContext = ExtensionPreferences & {}
   /** Preferences accessible in the `switch-context-namespace` command */
@@ -30,8 +28,6 @@ declare namespace Preferences {
 declare namespace Arguments {
   /** Arguments passed to the `list-contexts` command */
   export type ListContexts = {}
-  /** Arguments passed to the `switch-context` command */
-  export type SwitchContext = {}
   /** Arguments passed to the `current-context` command */
   export type CurrentContext = {}
   /** Arguments passed to the `switch-context-namespace` command */

@@ -39,11 +39,12 @@ A Raycast extension for efficiently managing Kubernetes contexts using direct ku
 - ✅ Current context indicator
 - ✅ Real-time search and filtering
 
-#### Task 2.2: Switch Context Command ✅ COMPLETED  
-- ✅ `src/switch-context.tsx` - Context switching interface
+#### Task 2.2: Enhanced List Contexts Command ✅ COMPLETED
+- ✅ `src/list-contexts.tsx` - Enhanced context listing with switching capability
 - ✅ Direct kubeconfig modification (no kubectl needed)
 - ✅ Success/error feedback via toast notifications
 - ✅ Instant context switching with namespace display
+- ✅ Advanced search and filtering functionality
 
 #### Task 2.3: Current Context Display ✅ COMPLETED
 - ✅ `src/current-context.tsx` - Current context information
@@ -89,13 +90,12 @@ A Raycast extension for efficiently managing Kubernetes contexts using direct ku
 
 ## Extension Commands
 
-### Production Commands (6 commands)
-1. **List Contexts** - ⚡ Enhanced with fuzzy search, relevance scoring, and recent context tracking
-2. **Switch Context** - Dedicated context switching interface with namespace display
-3. **Current Context** - Display current context with quick actions
-4. **Switch Context with Namespace** - Two-step context + namespace selection workflow
-5. **Manage Namespaces** - Comprehensive namespace management interface
-6. **Advanced Context Search** - ⭐ Full-featured search with filtering, recent contexts, and relevance scoring
+### Production Commands (5 commands)
+1. **List Contexts** - ⚡ Enhanced with fuzzy search, relevance scoring, recent context tracking, and context switching
+2. **Current Context** - Display current context with quick actions
+3. **Switch Context with Namespace** - Two-step context + namespace selection workflow
+4. **Manage Namespaces** - Comprehensive namespace management interface
+5. **Advanced Context Search** - ⭐ Full-featured search with filtering, recent contexts, and relevance scoring
 
 ## Technical Implementation
 
@@ -112,8 +112,7 @@ src/
 │   └── errors.ts              # Error handling utilities
 ├── types/
 │   └── index.ts               # TypeScript interfaces
-├── list-contexts.tsx          # Enhanced context listing with fuzzy search
-├── switch-context.tsx         # Context switching command
+├── list-contexts.tsx          # Enhanced context listing with fuzzy search and switching
 ├── current-context.tsx        # Current context display command
 ├── switch-context-namespace.tsx # Context switching with namespace selection
 ├── manage-namespaces.tsx      # Comprehensive namespace management
@@ -151,7 +150,7 @@ src/
 - **Core Features**: Context listing, switching, current context display  
 - **Enhanced Features**: Complete namespace management and advanced search functionality
 - **Clean Codebase**: All kubectl references removed
-- **Working Extension**: Builds successfully with 6 production commands
+- **Working Extension**: Builds successfully with 5 production commands
 
 ### 📋 READY FOR DEVELOPMENT (Next Tasks)
 - **Task 3.3**: Enhanced context metadata display
@@ -221,4 +220,4 @@ npm run publish
 - **BREAKTHROUGH SOLUTION**: Direct kubeconfig manipulation eliminates all kubectl execution issues
 - **COMPREHENSIVE NAMESPACE MANAGEMENT**: Full namespace lifecycle with intuitive UI
 - **INTELLIGENT SEARCH**: Multi-field fuzzy search with relevance scoring and recent context tracking
-- **PRODUCTION READY**: 7 polished commands covering all essential Kubernetes context workflows
+- **PRODUCTION READY**: 5 polished commands covering all essential Kubernetes context workflows

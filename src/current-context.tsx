@@ -42,7 +42,7 @@ ${contexts.length > 0 ?
   "No contexts found"
 }
 
-*Use the "Switch Context" command to set an active context*
+*Use the "List Contexts" command to switch between contexts*
       `;
     }
 

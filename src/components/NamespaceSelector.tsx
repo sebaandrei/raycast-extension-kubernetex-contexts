@@ -39,7 +39,7 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
               <Action
                 title="Cancel"
                 onAction={onCancel}
-                shortcut={{ modifiers: ["cmd"], key: "w" }}
+                shortcut={{ modifiers: ["cmd"], key: "t" }}
               />
             </ActionPanel>
           }
@@ -55,7 +55,7 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
               <Action
                 title="Cancel"
                 onAction={onCancel}
-                shortcut={{ modifiers: ["cmd"], key: "w" }}
+                shortcut={{ modifiers: ["cmd"], key: "t" }}
               />
             </ActionPanel>
           }
