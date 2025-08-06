@@ -1,4 +1,6 @@
-.DS_Store
+**/.DS_Store
+Claude.md
+
 
 # Dependencies
 node_modules/
@@ -148,7 +150,6 @@ temp/
 .raycast/
 
 # Package manager files
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 

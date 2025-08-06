@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { 
-  readKubeconfig, 
-  getAllContexts, 
-  getCurrentContext, 
-  switchToContext, 
+import {
+  getAllContexts,
+  getCurrentContext,
+  switchToContext,
   setContextNamespace,
   switchToContextWithNamespace,
   getAllAvailableNamespaces,
-  isKubeconfigAvailable,
-  getKubeconfigInfo
+  getKubeconfigInfo,
 } from "../utils/kubeconfig-direct";
 import { KubernetesContext } from "../types";
 
@@ -28,7 +26,7 @@ export function useKubeconfigInfo() {
   const refresh = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const kubeconfigInfo = getKubeconfigInfo();
       setInfo(kubeconfigInfo);
@@ -62,7 +60,7 @@ export function useCurrentKubeContext() {
   const refresh = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const current = getCurrentContext();
       setCurrentContext(current);
@@ -96,7 +94,7 @@ export function useKubeContexts() {
   const refresh = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const allContexts = getAllContexts();
       setContexts(allContexts);
@@ -130,7 +128,7 @@ export function useNamespaces() {
   const refresh = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const availableNamespaces = getAllAvailableNamespaces();
       setNamespaces(availableNamespaces);
@@ -163,7 +161,7 @@ export function useContextSwitcher() {
   const switchContext = useCallback(async (contextName: string) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const success = switchToContext(contextName);
       if (!success) {
@@ -178,41 +176,51 @@ export function useContextSwitcher() {
     }
   }, []);
 
-  const switchContextWithNamespace = useCallback(async (contextName: string, namespace?: string) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const success = switchToContextWithNamespace(contextName, namespace);
-      if (!success) {
-        throw new Error(`Failed to switch to context: ${contextName}${namespace ? ` with namespace: ${namespace}` : ''}`);
-      }
-      return true;
-    } catch (err) {
-      setError(err as Error);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const switchContextWithNamespace = useCallback(
+    async (contextName: string, namespace?: string) => {
+      setIsLoading(true);
+      setError(null);
 
-  const setNamespace = useCallback(async (contextName: string, namespace: string) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const success = setContextNamespace(contextName, namespace);
-      if (!success) {
-        throw new Error(`Failed to set namespace for context: ${contextName}`);
+      try {
+        const success = switchToContextWithNamespace(contextName, namespace);
+        if (!success) {
+          throw new Error(
+            `Failed to switch to context: ${contextName}${namespace ? ` with namespace: ${namespace}` : ""}`,
+          );
+        }
+        return true;
+      } catch (err) {
+        setError(err as Error);
+        return false;
+      } finally {
+        setIsLoading(false);
       }
-      return true;
-    } catch (err) {
-      setError(err as Error);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
+
+  const setNamespace = useCallback(
+    async (contextName: string, namespace: string) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const success = setContextNamespace(contextName, namespace);
+        if (!success) {
+          throw new Error(
+            `Failed to set namespace for context: ${contextName}`,
+          );
+        }
+        return true;
+      } catch (err) {
+        setError(err as Error);
+        return false;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
 
   return {
     switchContext,
@@ -240,47 +248,66 @@ export function useKubeconfig() {
     namespaces.refresh();
   }, [info, currentContext, contexts, namespaces]);
 
-  const switchContext = useCallback(async (contextName: string) => {
-    const success = await switcher.switchContext(contextName);
-    if (success) {
-      // Refresh current context after successful switch
-      currentContext.refresh();
-      contexts.refresh();
-    }
-    return success;
-  }, [switcher, currentContext, contexts]);
+  const switchContext = useCallback(
+    async (contextName: string) => {
+      const success = await switcher.switchContext(contextName);
+      if (success) {
+        // Refresh current context after successful switch
+        currentContext.refresh();
+        contexts.refresh();
+      }
+      return success;
+    },
+    [switcher, currentContext, contexts],
+  );
 
-  const switchContextWithNamespace = useCallback(async (contextName: string, namespace?: string) => {
-    const success = await switcher.switchContextWithNamespace(contextName, namespace);
-    if (success) {
-      // Refresh all data after successful switch
-      currentContext.refresh();
-      contexts.refresh();
-      namespaces.refresh();
-    }
-    return success;
-  }, [switcher, currentContext, contexts, namespaces]);
+  const switchContextWithNamespace = useCallback(
+    async (contextName: string, namespace?: string) => {
+      const success = await switcher.switchContextWithNamespace(
+        contextName,
+        namespace,
+      );
+      if (success) {
+        // Refresh all data after successful switch
+        currentContext.refresh();
+        contexts.refresh();
+        namespaces.refresh();
+      }
+      return success;
+    },
+    [switcher, currentContext, contexts, namespaces],
+  );
 
   return {
     // Info
     kubeconfigInfo: info.info,
     isKubeconfigAvailable: info.info.available,
-    
+
     // Current context
     currentContext: currentContext.currentContext,
-    
+
     // All contexts
     contexts: contexts.contexts,
-    
+
     // Available namespaces
     namespaces: namespaces.namespaces,
-    
+
     // Loading states
-    isLoading: info.isLoading || currentContext.isLoading || contexts.isLoading || namespaces.isLoading || switcher.isLoading,
-    
+    isLoading:
+      info.isLoading ||
+      currentContext.isLoading ||
+      contexts.isLoading ||
+      namespaces.isLoading ||
+      switcher.isLoading,
+
     // Errors
-    error: info.error || currentContext.error || contexts.error || namespaces.error || switcher.error,
-    
+    error:
+      info.error ||
+      currentContext.error ||
+      contexts.error ||
+      namespaces.error ||
+      switcher.error,
+
     // Operations
     switchContext,
     switchContextWithNamespace,
