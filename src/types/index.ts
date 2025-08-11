@@ -1,3 +1,14 @@
+// Kubernetes cluster metadata
+export interface ClusterDetails {
+  name: string;
+  server: string;
+  isSecure: boolean;
+  hasCA: boolean;
+  protocol: string;
+  hostname: string;
+  port: string;
+}
+
 // Kubernetes context interface
 export interface KubernetesContext {
   name: string;
@@ -5,6 +16,8 @@ export interface KubernetesContext {
   user: string;
   namespace?: string;
   current?: boolean;
+  clusterDetails?: ClusterDetails;
+  userAuthMethod?: string;
 }
 
 export interface ContextListItem {

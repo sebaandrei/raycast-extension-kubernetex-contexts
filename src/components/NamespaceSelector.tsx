@@ -5,13 +5,12 @@ interface NamespaceSelectorProps {
   namespaces: string[];
   currentNamespace?: string;
   onSelect: (namespace: string) => void;
-  onCancel: () => void;
 }
 
-export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCancel }: NamespaceSelectorProps) {
+export function NamespaceSelector({ namespaces, currentNamespace, onSelect }: NamespaceSelectorProps) {
   const [searchText, setSearchText] = useState("");
 
-  const filteredNamespaces = namespaces.filter(namespace =>
+  const filteredNamespaces = namespaces.filter((namespace) =>
     namespace.toLowerCase().includes(searchText.toLowerCase())
   );
 
@@ -28,19 +27,14 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
           title={namespace}
           subtitle={namespace === currentNamespace ? "Current namespace" : ""}
           accessories={[
-            { text: namespace === currentNamespace ? "●" : "", tooltip: namespace === currentNamespace ? "Current namespace" : undefined }
+            {
+              text: namespace === currentNamespace ? "●" : "",
+              tooltip: namespace === currentNamespace ? "Current namespace" : undefined,
+            },
           ]}
           actions={
             <ActionPanel>
-              <Action
-                title={`Select ${namespace}`}
-                onAction={() => onSelect(namespace)}
-              />
-              <Action
-                title="Cancel"
-                onAction={onCancel}
-                shortcut={{ modifiers: ["cmd"], key: "w" }}
-              />
+              <Action title={`Select ${namespace}`} onAction={() => onSelect(namespace)} />
             </ActionPanel>
           }
         />
@@ -52,11 +46,7 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
           accessories={[{ text: "⚠️" }]}
           actions={
             <ActionPanel>
-              <Action
-                title="Cancel"
-                onAction={onCancel}
-                shortcut={{ modifiers: ["cmd"], key: "w" }}
-              />
+              <Action title="No Action Available" onAction={() => {}} />
             </ActionPanel>
           }
         />

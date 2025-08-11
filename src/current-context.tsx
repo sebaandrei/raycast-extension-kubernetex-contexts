@@ -1,11 +1,11 @@
-import { Detail, ActionPanel, Action } from "@raycast/api";
+import { Detail, ActionPanel, Action, popToRoot, Keyboard } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 
 export default function CurrentContext() {
   const { contexts, currentContext, kubeconfigInfo, isLoading, error, refresh, switchContext } = useKubeconfig();
 
-  const currentCtx = contexts.find(ctx => ctx.current);
+  const currentCtx = contexts.find((ctx) => ctx.current);
 
   const generateMarkdown = () => {
     if (error) {
@@ -37,12 +37,9 @@ ${error.message}
 - **Total Contexts**: ${kubeconfigInfo.contextCount}
 
 ## Available Contexts
-${contexts.length > 0 ? 
-  contexts.map(ctx => `- ${ctx.name} (${ctx.cluster})`).join('\n') :
-  "No contexts found"
-}
+${contexts.length > 0 ? contexts.map((ctx) => `- ${ctx.name} (${ctx.cluster})`).join("\n") : "No contexts found"}
 
-*Use the "Switch Context" command to set an active context*
+*Use the "Kube Contexts" command to switch between contexts*
       `;
     }
 
@@ -51,30 +48,51 @@ ${contexts.length > 0 ?
 
 ## ✅ Active Context: **${currentContext}**
 
-${currentCtx ? `
+${
+  currentCtx
+    ? `
 ## Context Details
 - **Name**: ${currentCtx.name}
 - **Cluster**: ${currentCtx.cluster}
 - **User**: ${currentCtx.user}
 - **Namespace**: ${currentCtx.namespace || "default"}
+- **Authentication**: ${currentCtx.userAuthMethod || "Unknown"}
 
 ## Cluster Information
+${
+  currentCtx.clusterDetails
+    ? `
+- **Server**: ${currentCtx.clusterDetails.server}
+- **Hostname**: ${currentCtx.clusterDetails.hostname}
+- **Port**: ${currentCtx.clusterDetails.port}
+- **Protocol**: ${currentCtx.clusterDetails.protocol}
+- **Security**: ${currentCtx.clusterDetails.isSecure ? "🔒 Secure" : "⚠️ Insecure"}
+- **CA Certificate**: ${currentCtx.clusterDetails.hasCA ? "✅ Present" : "❌ Missing"}
+`
+    : "- **Server**: Unknown"
+}
+
+## File Information
 - **Context File**: ${kubeconfigInfo.path}
 - **Total Contexts Available**: ${kubeconfigInfo.contextCount}
-` : ''}
+`
+    : ""
+}
 
 ## Quick Actions
 Use the actions below to manage your contexts quickly.
     `;
   };
 
-  const otherContexts = contexts.filter(ctx => !ctx.current).slice(0, 5);
+  const otherContexts = contexts.filter((ctx) => !ctx.current).slice(0, 5);
 
   const handleSwitchContext = async (contextName: string) => {
     try {
       const success = await switchContext(contextName);
       if (success) {
         await showSuccessToast("Context Switched", `Switched to: ${contextName}`);
+        // Go back to Raycast main command list
+        await popToRoot();
       }
     } catch (err) {
       await showErrorToast(err as Error);
@@ -87,19 +105,25 @@ Use the actions below to manage your contexts quickly.
       markdown={generateMarkdown()}
       actions={
         <ActionPanel>
-          <Action
-            title="Refresh"
-            onAction={refresh}
-            shortcut={{ modifiers: ["cmd"], key: "r" }}
-          />
-          {otherContexts.map((ctx, index) => (
-            <Action
-              key={ctx.name}
-              title={`Switch to ${ctx.name}`}
-              onAction={() => handleSwitchContext(ctx.name)}
-              shortcut={{ modifiers: ["cmd"], key: (index + 1).toString() as any }}
-            />
-          ))}
+          <Action title="Refresh" onAction={refresh} shortcut={Keyboard.Shortcut.Common.Refresh} />
+          {otherContexts.map((ctx, index) => {
+            // Map index to valid KeyEquivalent values
+            const keyMap = ["1", "2", "3", "4", "5"] as const;
+
+            return (
+              <Action
+                key={ctx.name}
+                title={`Switch to ${ctx.name}`}
+                onAction={() => handleSwitchContext(ctx.name)}
+                {...(index < 5 && {
+                  shortcut: {
+                    modifiers: ["cmd"] as const,
+                    key: keyMap[index],
+                  },
+                })}
+              />
+            );
+          })}
         </ActionPanel>
       }
     />

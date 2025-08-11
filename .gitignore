@@ -1,3 +1,5 @@
+**/.DS_Store
+
 # Dependencies
 node_modules/
 npm-debug.log*
@@ -33,9 +35,6 @@ build/Release
 
 # Dependency directories
 jspm_packages/
-
-# TypeScript cache
-*.tsbuildinfo
 
 # Optional npm cache directory
 .npm
@@ -146,7 +145,6 @@ temp/
 .raycast/
 
 # Package manager files
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
