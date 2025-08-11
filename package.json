@@ -6,9 +6,7 @@
   "icon": "k8s.png",
   "author": "sebastian_andrei_roman",
   "categories": [
-    "Developer Tools",
-    "Kubernetes",
-    "K8s"
+    "Developer Tools"
   ],
   "keywords": [
     "kubernetes",
