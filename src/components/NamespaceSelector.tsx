@@ -8,11 +8,16 @@ interface NamespaceSelectorProps {
   onCancel: () => void;
 }
 
-export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCancel }: NamespaceSelectorProps) {
+export function NamespaceSelector({
+  namespaces,
+  currentNamespace,
+  onSelect,
+  onCancel,
+}: NamespaceSelectorProps) {
   const [searchText, setSearchText] = useState("");
 
-  const filteredNamespaces = namespaces.filter(namespace =>
-    namespace.toLowerCase().includes(searchText.toLowerCase())
+  const filteredNamespaces = namespaces.filter((namespace) =>
+    namespace.toLowerCase().includes(searchText.toLowerCase()),
   );
 
   return (
@@ -28,7 +33,13 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
           title={namespace}
           subtitle={namespace === currentNamespace ? "Current namespace" : ""}
           accessories={[
-            { text: namespace === currentNamespace ? "●" : "", tooltip: namespace === currentNamespace ? "Current namespace" : undefined }
+            {
+              text: namespace === currentNamespace ? "●" : "",
+              tooltip:
+                namespace === currentNamespace
+                  ? "Current namespace"
+                  : undefined,
+            },
           ]}
           actions={
             <ActionPanel>
@@ -39,7 +50,7 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
               <Action
                 title="Cancel"
                 onAction={onCancel}
-                shortcut={{ modifiers: ["cmd"], key: "w" }}
+                shortcut={{ modifiers: ["cmd"], key: "t" }}
               />
             </ActionPanel>
           }
@@ -48,14 +59,18 @@ export function NamespaceSelector({ namespaces, currentNamespace, onSelect, onCa
       {filteredNamespaces.length === 0 && (
         <List.Item
           title="No Namespaces Found"
-          subtitle={searchText ? `No namespaces matching "${searchText}"` : "No namespaces available"}
+          subtitle={
+            searchText
+              ? `No namespaces matching "${searchText}"`
+              : "No namespaces available"
+          }
           accessories={[{ text: "⚠️" }]}
           actions={
             <ActionPanel>
               <Action
                 title="Cancel"
                 onAction={onCancel}
-                shortcut={{ modifiers: ["cmd"], key: "w" }}
+                shortcut={{ modifiers: ["cmd"], key: "t" }}
               />
             </ActionPanel>
           }

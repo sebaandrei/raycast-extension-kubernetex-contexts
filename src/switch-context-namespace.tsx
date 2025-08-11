@@ -1,33 +1,52 @@
-import { List, ActionPanel, Action, useNavigation } from "@raycast/api";
+import {
+  List,
+  ActionPanel,
+  Action,
+  useNavigation,
+  Icon,
+  popToRoot,
+} from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { NamespaceSelector } from "./components/NamespaceSelector";
-import { useState } from "react";
+import { ContextDetails } from "./components/ContextDetails";
 
 export default function SwitchContextWithNamespace() {
-  const { contexts, currentContext, namespaces, isLoading, error, switchContextWithNamespace } = useKubeconfig();
+  const {
+    contexts,
+    currentContext,
+    namespaces,
+    isLoading,
+    error,
+    switchContextWithNamespace,
+  } = useKubeconfig();
   const { push } = useNavigation();
-  const [selectedContext, setSelectedContext] = useState<string | null>(null);
-
   const handleContextSelect = (contextName: string) => {
-    const context = contexts.find(ctx => ctx.name === contextName);
-    setSelectedContext(contextName);
-    
+    const context = contexts.find((ctx) => ctx.name === contextName);
+
     push(
       <NamespaceSelector
         namespaces={namespaces}
         currentNamespace={context?.namespace}
         onSelect={(namespace) => handleNamespaceSelect(contextName, namespace)}
-        onCancel={() => setSelectedContext(null)}
-      />
+        onCancel={() => {}}
+      />,
     );
   };
 
-  const handleNamespaceSelect = async (contextName: string, namespace: string) => {
+  const handleNamespaceSelect = async (
+    contextName: string,
+    namespace: string,
+  ) => {
     try {
       const success = await switchContextWithNamespace(contextName, namespace);
       if (success) {
-        await showSuccessToast("Context Switched", `Switched to: ${contextName} (namespace: ${namespace})`);
+        await showSuccessToast(
+          "Context Switched",
+          `Switched to: ${contextName} (namespace: ${namespace})`,
+        );
+        // Go back to Raycast main command list
+        await popToRoot();
       }
     } catch (err) {
       await showErrorToast(err as Error);
@@ -38,7 +57,12 @@ export default function SwitchContextWithNamespace() {
     try {
       const success = await switchContextWithNamespace(contextName);
       if (success) {
-        await showSuccessToast("Context Switched", `Switched to: ${contextName}`);
+        await showSuccessToast(
+          "Context Switched",
+          `Switched to: ${contextName}`,
+        );
+        // Go back to Raycast main command list
+        await popToRoot();
       }
     } catch (err) {
       await showErrorToast(err as Error);
@@ -58,16 +82,19 @@ export default function SwitchContextWithNamespace() {
   }
 
   // Filter out current context since we're on a switch-specific screen
-  const availableContexts = contexts.filter(ctx => !ctx.current);
+  const availableContexts = contexts.filter((ctx) => !ctx.current);
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search contexts to switch to...">
+    <List
+      isLoading={isLoading}
+      searchBarPlaceholder="Search contexts to switch to..."
+    >
       <List.Item
         title={`Current: ${currentContext || "None"}`}
         subtitle="Currently active context"
         accessories={[{ text: "●" }]}
       />
-      
+
       {availableContexts.map((context) => (
         <List.Item
           key={context.name}
@@ -82,13 +109,18 @@ export default function SwitchContextWithNamespace() {
               <Action
                 title={`Quick Switch to ${context.name}`}
                 onAction={() => handleQuickSwitch(context.name)}
-                shortcut={{ modifiers: ["cmd"], key: "enter" }}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+              />
+              <Action.Push
+                title={`View ${context.name} Details`}
+                icon={Icon.Info}
+                target={<ContextDetails context={context} />}
               />
             </ActionPanel>
           }
         />
       ))}
-      
+
       {availableContexts.length === 0 && contexts.length > 0 && !isLoading && (
         <List.Item
           title="No Other Contexts Available"
@@ -96,7 +128,7 @@ export default function SwitchContextWithNamespace() {
           accessories={[{ text: "ℹ️" }]}
         />
       )}
-      
+
       {contexts.length === 0 && !isLoading && (
         <List.Item
           title="No Contexts Found"
