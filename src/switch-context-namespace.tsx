@@ -1,5 +1,5 @@
-import { List, ActionPanel, Action, useNavigation, Icon, popToRoot } from "@raycast/api";
-import { showFailureToast, showToast, Toast } from "@raycast/utils";
+import { List, ActionPanel, Action, useNavigation, Icon, popToRoot, showToast, Toast } from "@raycast/api";
+import { showFailureToast } from "@raycast/utils";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
 import { ContextDetails } from "./components/ContextDetails";

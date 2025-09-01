@@ -1,5 +1,5 @@
-import { Detail, ActionPanel, Action, popToRoot, Keyboard } from "@raycast/api";
-import { showFailureToast, showToast, Toast } from "@raycast/utils";
+import { Detail, ActionPanel, Action, popToRoot, Keyboard, showToast, Toast } from "@raycast/api";
+import { showFailureToast } from "@raycast/utils";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 
 export default function CurrentContext() {

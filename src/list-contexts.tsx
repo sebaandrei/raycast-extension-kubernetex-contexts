@@ -71,16 +71,20 @@ export default function ListContexts() {
               tooltip: "Authentication Method",
             },
             ...(context.clusterDetails
-              ? [{
-                  text: context.clusterDetails.protocol,
-                  tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
-                }]
+              ? [
+                  {
+                    text: context.clusterDetails.protocol,
+                    tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
+                  },
+                ]
               : []),
             ...(searchQuery
-              ? [{
-                  text: `${relevanceScore.toFixed(0)}%`,
-                  tooltip: `Relevance (matched: ${matchedFields.join(", ")})`,
-                }]
+              ? [
+                  {
+                    text: `${relevanceScore.toFixed(0)}%`,
+                    tooltip: `Relevance (matched: ${matchedFields.join(", ")})`,
+                  },
+                ]
               : []),
             {
               text: context.current ? "●" : "",
@@ -100,11 +104,13 @@ export default function ListContexts() {
                 <Action
                   title="Current Context"
                   icon={Icon.CheckCircle}
-                  onAction={() => showToast({
-                    style: Toast.Style.Success,
-                    title: "Current Context",
-                    message: `Already using ${context.name}`,
-                  })}
+                  onAction={() =>
+                    showToast({
+                      style: Toast.Style.Success,
+                      title: "Current Context",
+                      message: `Already using ${context.name}`,
+                    })
+                  }
                 />
               )}
               <Action.Push
