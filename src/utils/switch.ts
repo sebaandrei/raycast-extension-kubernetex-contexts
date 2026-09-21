@@ -20,7 +20,7 @@ export function formatSwitchMessage(contextName: string, namespace?: string): st
  * `perform` is the hook operation that actually switches. Never throws.
  */
 export async function switchAndClose(perform: () => Promise<unknown>, opts: SwitchOptions): Promise<boolean> {
-  if (opts.contextName !== opts.fromContext && getProductionMatcher()(opts.contextName)) {
+  if (opts.contextName !== opts.fromContext && getProductionMatcher().isProduction(opts.contextName)) {
     const confirmed = await confirmAlert({
       title: "Switch to production?",
       message: `"${opts.contextName}" looks like a production context. Subsequent kubectl and other commands will target it.`,

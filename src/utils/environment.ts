@@ -27,18 +27,27 @@ export function isProduction(contextName: string, pattern?: string): boolean {
   return regex !== null && regex.test(contextName);
 }
 
+export interface ProductionMatcher {
+  isProduction: (contextName: string) => boolean;
+  /** `false` when the preference is not a valid regex and the default is in use. */
+  valid: boolean;
+}
+
+/** Pure with respect to the UI: reads the preference and builds a matcher, no side effects. */
+export function getProductionMatcher(): ProductionMatcher {
+  const { regex, valid } = compileProductionPattern(getPreferences().productionPattern);
+  return { isProduction: (contextName) => regex !== null && regex.test(contextName), valid };
+}
+
 let invalidPatternReported = false;
 
-/** Reads the preference and returns a matcher. Reports an invalid pattern once per command run. */
-export function getProductionMatcher(): (contextName: string) => boolean {
-  const { regex, valid } = compileProductionPattern(getPreferences().productionPattern);
-  if (!valid && !invalidPatternReported) {
-    invalidPatternReported = true;
-    showToast({
-      style: Toast.Style.Failure,
-      title: "Invalid production pattern",
-      message: `Using the default pattern "${DEFAULT_PRODUCTION_PATTERN}" instead. Fix it in the extension preferences.`,
-    }).catch((err) => console.error("Failed to show invalid pattern toast:", err));
-  }
-  return (contextName) => regex !== null && regex.test(contextName);
+/** Tell the user once per command run that the pattern is invalid. Call from an effect or event handler, not render. */
+export function reportInvalidPatternOnce(): void {
+  if (invalidPatternReported) return;
+  invalidPatternReported = true;
+  showToast({
+    style: Toast.Style.Failure,
+    title: "Invalid production pattern",
+    message: `Using the default pattern "${DEFAULT_PRODUCTION_PATTERN}" instead. Fix it in the extension preferences.`,
+  }).catch((err) => console.error("Failed to show invalid pattern toast:", err));
 }

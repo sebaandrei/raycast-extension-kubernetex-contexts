@@ -1,12 +1,28 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  showToast: vi.fn(),
+  getPreferences: vi.fn(),
+}));
 
 vi.mock("@raycast/api", () => ({
-  showToast: vi.fn(),
+  showToast: mocks.showToast,
   Toast: { Style: { Failure: "failure" } },
 }));
-vi.mock("../preferences", () => ({ getPreferences: vi.fn() }));
+vi.mock("../preferences", () => ({ getPreferences: mocks.getPreferences }));
 
-import { compileProductionPattern, DEFAULT_PRODUCTION_PATTERN, isProduction } from "../environment";
+import {
+  compileProductionPattern,
+  DEFAULT_PRODUCTION_PATTERN,
+  getProductionMatcher,
+  isProduction,
+  reportInvalidPatternOnce,
+} from "../environment";
+
+beforeEach(() => {
+  mocks.showToast.mockReset().mockResolvedValue(undefined);
+  mocks.getPreferences.mockReset();
+});
 
 describe("compileProductionPattern", () => {
   it("uses the default for undefined or non-string values", () => {
@@ -44,5 +60,36 @@ describe("isProduction", () => {
   it("falls back to the default on an invalid regex", () => {
     expect(isProduction("prod-eu", "(unclosed")).toBe(true);
     expect(isProduction("staging", "(unclosed")).toBe(false);
+  });
+});
+
+describe("getProductionMatcher", () => {
+  it("matches using the preference and never shows a toast", () => {
+    mocks.getPreferences.mockReturnValue({ productionPattern: "^prod-" });
+    const matcher = getProductionMatcher();
+
+    expect(matcher.valid).toBe(true);
+    expect(matcher.isProduction("prod-eu")).toBe(true);
+    expect(matcher.isProduction("my-prod")).toBe(false);
+    expect(mocks.showToast).not.toHaveBeenCalled();
+  });
+
+  it("reports an invalid pattern without a side effect and falls back to the default", () => {
+    mocks.getPreferences.mockReturnValue({ productionPattern: "(unclosed" });
+    const matcher = getProductionMatcher();
+
+    expect(matcher.valid).toBe(false);
+    expect(matcher.isProduction("live-1")).toBe(true);
+    expect(mocks.showToast).not.toHaveBeenCalled();
+  });
+});
+
+describe("reportInvalidPatternOnce", () => {
+  it("shows the toast only once per run", () => {
+    reportInvalidPatternOnce();
+    reportInvalidPatternOnce();
+
+    expect(mocks.showToast).toHaveBeenCalledTimes(1);
+    expect(mocks.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: "Invalid production pattern" }));
   });
 });

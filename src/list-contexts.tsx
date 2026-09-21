@@ -5,7 +5,7 @@ import { searchAndFilterContexts, addRecentContext, SearchFilters } from "./util
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
 import { contextIcon, prodAccessory } from "./components/context-visuals";
-import { getProductionMatcher } from "./utils/environment";
+import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function ListContexts() {
   const { contexts, currentContext, isLoading, error, switchContext } = useKubeconfig();
@@ -25,7 +25,7 @@ export default function ListContexts() {
     if (switched) addRecentContext(contextName);
   };
 
-  const isProd = getProductionMatcher();
+  const isProd = useProductionMatcher();
 
   if (error) {
     return (

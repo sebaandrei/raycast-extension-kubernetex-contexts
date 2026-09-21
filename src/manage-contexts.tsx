@@ -7,7 +7,7 @@ import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
 import { contextIcon, prodAccessory } from "./components/context-visuals";
-import { getProductionMatcher } from "./utils/environment";
+import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function ManageContexts() {
   const { contexts, clusters, users, isLoading, error, refresh, switchContext, currentContext } = useKubeconfig();
@@ -25,7 +25,7 @@ export default function ManageContexts() {
     );
   }, [contexts, searchQuery]);
 
-  const isProd = getProductionMatcher();
+  const isProd = useProductionMatcher();
 
   async function handleDelete(contextName: string, removeUnused: boolean) {
     const prod = isProd(contextName);

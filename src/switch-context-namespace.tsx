@@ -4,7 +4,7 @@ import { NamespaceSelector } from "./components/NamespaceSelector";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
 import { contextIcon, prodAccessory } from "./components/context-visuals";
-import { getProductionMatcher } from "./utils/environment";
+import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function SwitchContextWithNamespace() {
   const { contexts, currentContext, namespaces, isLoading, error, switchContextWithNamespace } = useKubeconfig();
@@ -31,7 +31,7 @@ export default function SwitchContextWithNamespace() {
   const handleQuickSwitch = (contextName: string) =>
     switchAndClose(() => switchContextWithNamespace(contextName), { contextName, fromContext: currentContext });
 
-  const isProd = getProductionMatcher();
+  const isProd = useProductionMatcher();
 
   if (error) {
     return (
