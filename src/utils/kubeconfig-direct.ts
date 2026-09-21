@@ -1,12 +1,9 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 import { parse, stringify } from "yaml";
 import { KubernetesContext, ClusterDetails } from "../types";
 import { KubeconfigError, ValidationError } from "./errors";
-
-// Default kubeconfig location
-const DEFAULT_KUBECONFIG = join(homedir(), ".kube", "config");
+import { resolveKubeconfigPath } from "./kubeconfig-path";
+import { getPreferences } from "./preferences";
 
 interface KubeConfig {
   "current-context"?: string;
@@ -46,23 +43,21 @@ interface KubeConfig {
 }
 
 /**
- * Get the kubeconfig file path from environment or default
+ * Get the kubeconfig file path from preferences, environment or default
  */
-function getKubeconfigPath(): string {
-  return process.env.KUBECONFIG || DEFAULT_KUBECONFIG;
+export function getKubeconfigPath(): string {
+  return resolveKubeconfigPath(getPreferences().kubeconfigPath);
 }
 
 /**
  * Read and parse the kubeconfig file with enhanced error handling
  */
-export function readKubeconfig(): KubeConfig {
+export function readKubeconfig(kubeconfigPath: string = getKubeconfigPath()): KubeConfig {
   try {
-    const kubeconfigPath = getKubeconfigPath();
-
     if (!existsSync(kubeconfigPath)) {
       throw new KubeconfigError(
         `Kubeconfig file not found at ${kubeconfigPath}`,
-        "Create a kubeconfig file or set KUBECONFIG environment variable"
+        "Create a kubeconfig file or set the Kubeconfig Path in the extension preferences"
       );
     }
 
@@ -86,8 +81,8 @@ export function readKubeconfig(): KubeConfig {
     if (error instanceof Error) {
       if (error.message.includes("permission denied") || error.message.includes("EACCES")) {
         throw new KubeconfigError(
-          "Permission denied accessing kubeconfig",
-          "Fix file permissions: chmod 600 ~/.kube/config"
+          `Permission denied accessing ${kubeconfigPath}`,
+          `Fix file permissions: chmod 600 ${kubeconfigPath}`
         );
       }
 
@@ -107,10 +102,8 @@ export function readKubeconfig(): KubeConfig {
 /**
  * Write kubeconfig back to file with enhanced error handling
  */
-export function writeKubeconfig(config: KubeConfig): void {
+export function writeKubeconfig(config: KubeConfig, kubeconfigPath: string = getKubeconfigPath()): void {
   try {
-    const kubeconfigPath = getKubeconfigPath();
-
     // Validate config structure
     if (!config || typeof config !== "object") {
       throw new ValidationError("Invalid kubeconfig data", "Ensure the configuration object is valid");
@@ -148,8 +141,8 @@ export function writeKubeconfig(config: KubeConfig): void {
     if (error instanceof Error) {
       if (error.message.includes("permission denied") || error.message.includes("EACCES")) {
         throw new KubeconfigError(
-          "Permission denied writing kubeconfig",
-          "Fix file permissions: chmod 600 ~/.kube/config"
+          `Permission denied writing ${kubeconfigPath}`,
+          `Fix file permissions: chmod 600 ${kubeconfigPath}`
         );
       }
 

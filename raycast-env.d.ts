@@ -7,7 +7,14 @@
 
 /* eslint-disable @typescript-eslint/ban-types */
 
-type ExtensionPreferences = {}
+type ExtensionPreferences = {
+  /** Kubeconfig Path - Path to the kubeconfig file. Leave empty to use the first entry of $KUBECONFIG or ~/.kube/config. */
+  "kubeconfigPath"?: string,
+  /** Switching - Return to the main Raycast window after a successful context switch. */
+  "closeAfterSwitch": boolean,
+  /** Production Pattern - Case-insensitive regular expression. Matching context names are treated as production and require confirmation before switching. */
+  "productionPattern": string
+}
 
 /** Preferences accessible in all the extension's commands */
 declare type Preferences = ExtensionPreferences

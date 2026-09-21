@@ -19,6 +19,34 @@
     "k8s"
   ],
   "license": "MIT",
+  "preferences": [
+    {
+      "name": "kubeconfigPath",
+      "type": "textfield",
+      "required": false,
+      "title": "Kubeconfig Path",
+      "description": "Path to the kubeconfig file. Leave empty to use the first entry of $KUBECONFIG or ~/.kube/config.",
+      "placeholder": "~/.kube/config"
+    },
+    {
+      "name": "closeAfterSwitch",
+      "type": "checkbox",
+      "required": false,
+      "title": "Switching",
+      "label": "Close Raycast after switching context",
+      "description": "Return to the main Raycast window after a successful context switch.",
+      "default": true
+    },
+    {
+      "name": "productionPattern",
+      "type": "textfield",
+      "required": false,
+      "title": "Production Pattern",
+      "description": "Case-insensitive regular expression. Matching context names are treated as production and require confirmation before switching.",
+      "default": "prod|prd|live",
+      "placeholder": "prod|prd|live"
+    }
+  ],
   "commands": [
     {
       "name": "list-contexts",
