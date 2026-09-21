@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KubeconfigError } from "../kubeconfig-errors";
 import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "../kubeconfig-io";
@@ -113,6 +113,24 @@ describe("readKubeconfigFile", () => {
     writeFileSync(path, content);
     expect(() => readKubeconfigFile(path)).toThrow(KubeconfigError);
     expect(() => readKubeconfigFile(path)).toThrow(/Invalid kubeconfig: entry 1 of/);
+  });
+
+  it.each(["contexts", "clusters", "users"])("accepts `%s: null` (kubectl writes it for empty sections)", (key) => {
+    writeFileSync(path, `current-context: ""\n${key}: null\n`);
+    const config = readKubeconfigFile(path);
+    expect(config[key as "contexts" | "clusters" | "users"]).toBeNull();
+    writeKubeconfigFile(config, path);
+    expect(readFileSync(path, "utf8")).toBe(`current-context: ""\n${key}: null\n`);
+  });
+
+  it("validates before writing: an invalid config never reaches the disk", () => {
+    writeFileSync(path, "contexts:\n  - name: a\n");
+    const before = readFileSync(path, "utf8");
+    const config = readKubeconfigFile(path);
+    (config as { contexts: unknown }).contexts = "not a list";
+    expect(() => writeKubeconfigFile(config, path)).toThrow(/must be a list/);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(readdirSync(dirname(path)).filter((f) => f.endsWith(".tmp") || f.endsWith(".lock"))).toEqual([]);
   });
 
   it("accepts entries without their nested map and does not add keys", () => {

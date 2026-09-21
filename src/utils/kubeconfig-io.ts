@@ -138,7 +138,8 @@ const LIST_KEYS = ["contexts", "clusters", "users"] as const;
 function assertValidStructure(config: Record<string, unknown>): void {
   for (const key of LIST_KEYS) {
     const list = config[key];
-    if (list === undefined) continue;
+    // kubectl writes `contexts: null` for empty sections; treat like a missing list
+    if (list === undefined || list === null) continue;
     if (!Array.isArray(list)) {
       throw new KubeconfigError(
         `Invalid kubeconfig: "${key}" must be a list`,
@@ -409,6 +410,9 @@ export function writeKubeconfigFile(config: KubeConfig, kubeconfigPath: string):
         );
       }
 
+      // Validate before touching the disk so an invalid config is never written
+      assertValidStructure(config);
+
       // Sync into a copy so a failed write leaves the remembered document untouched
       let doc: Document;
       if (source) {
@@ -425,10 +429,13 @@ export function writeKubeconfigFile(config: KubeConfig, kubeconfigPath: string):
 
       atomicWrite(target, content, mode);
 
-      const written = statSync(target);
-      assertValidStructure(config);
-
-      sources.set(config, { doc, path: target, mtimeMs: written.mtimeMs, size: written.size });
+      // The file is written; a failing stat must not turn that into a reported failure
+      try {
+        const written = statSync(target);
+        sources.set(config, { doc, path: target, mtimeMs: written.mtimeMs, size: written.size });
+      } catch {
+        sources.delete(config);
+      }
     });
   } catch (error) {
     if (error instanceof KubeconfigError || error instanceof ValidationError) {
