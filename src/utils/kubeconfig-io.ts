@@ -2,6 +2,7 @@ import {
   closeSync,
   fchmodSync,
   fsyncSync,
+  lstatSync,
   openSync,
   readFileSync,
   realpathSync,
@@ -9,7 +10,6 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-  writeSync,
 } from "fs";
 import { basename, dirname, join } from "path";
 import { Document, isMap, isScalar, isSeq, parseDocument, YAMLMap, YAMLSeq } from "yaml";
@@ -164,18 +164,16 @@ function syncNode(existing: unknown, value: unknown, doc: Document): unknown {
     const seq = isSeq(existing) ? existing : (doc.createNode([]) as YAMLSeq);
     const previous = [...seq.items];
 
-    const byName = new Map<string, unknown>();
+    const byName = new Map<string, unknown[]>();
     for (const item of previous) {
       const name = isMap(item) ? item.get("name") : undefined;
-      if (typeof name === "string") byName.set(name, item);
+      if (typeof name === "string") byName.set(name, [...(byName.get(name) ?? []), item]);
     }
 
-    const used = new Set<unknown>();
     seq.items = value.map((item, index) => {
       const name = isPlainObject(item) && typeof item.name === "string" ? item.name : undefined;
-      const match = name !== undefined ? byName.get(name) : previous[index];
-      if (match !== undefined && used.has(match)) return syncNode(undefined, item, doc);
-      used.add(match);
+      // Duplicate names are matched in order, each node used at most once
+      const match = name !== undefined ? byName.get(name)?.shift() : previous[index];
       return syncNode(match, item, doc);
     });
     return seq;
@@ -200,27 +198,16 @@ function unlinkQuietly(path: string): void {
 }
 
 /**
- * Write via temp file and rename so readers never see a partial file.
- * Falls back to an in-place write when the directory is not writable.
+ * Write via temp file and rename so readers never see a partial file
  */
 function atomicWrite(target: string, content: string, mode: number): void {
   const tempPath = join(dirname(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
-
-  let fd: number;
-  try {
-    fd = openSync(tempPath, "wx", mode);
-  } catch (error) {
-    const code = errorCode(error);
-    if (code === "EACCES" || code === "EPERM" || code === "EROFS") {
-      writeFileSync(target, content, { encoding: "utf8", mode });
-      return;
-    }
-    throw error;
-  }
+  const fd = openSync(tempPath, "wx", mode);
 
   try {
     fchmodSync(fd, mode);
-    writeSync(fd, content);
+    // writeFileSync on a descriptor loops until every byte is written
+    writeFileSync(fd, content, "utf8");
     fsyncSync(fd);
   } catch (error) {
     closeSync(fd);
@@ -237,6 +224,67 @@ function atomicWrite(target: string, content: string, mode: number): void {
   }
 }
 
+const LOCK_ATTEMPTS = 10;
+const LOCK_WAIT_MS = 50;
+
+function sleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Hold `<kubeconfig>.lock` while running `fn`. kubectl uses the same lock
+ * file, so concurrent kubectl writes and ours exclude each other.
+ */
+function withLock<T>(target: string, fn: () => T): T {
+  const lockPath = `${target}.lock`;
+  let fd: number | undefined;
+
+  for (let attempt = 0; attempt < LOCK_ATTEMPTS && fd === undefined; attempt++) {
+    try {
+      fd = openSync(lockPath, "wx", NEW_FILE_MODE);
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error;
+      sleep(LOCK_WAIT_MS);
+    }
+  }
+
+  if (fd === undefined) {
+    throw new KubeconfigError(
+      `Kubeconfig is locked by another process (${lockPath})`,
+      "Retry in a moment. If no kubectl command is running, delete the stale lock file"
+    );
+  }
+
+  closeSync(fd);
+  try {
+    return fn();
+  } finally {
+    unlinkQuietly(lockPath);
+  }
+}
+
+/**
+ * Resolve symlinks so the real file is replaced, not the link.
+ * A path that does not exist yet is returned as-is.
+ */
+function resolveWriteTarget(kubeconfigPath: string): string {
+  try {
+    return realpathSync(kubeconfigPath);
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
+
+  try {
+    lstatSync(kubeconfigPath);
+  } catch {
+    return kubeconfigPath;
+  }
+  throw new KubeconfigError(
+    `${kubeconfigPath} is a symlink to a file that does not exist`,
+    "Fix or remove the symlink, or set the Kubeconfig Path preference"
+  );
+}
+
 /**
  * Write a kubeconfig back to disk, preserving comments and file mode
  */
@@ -246,42 +294,47 @@ export function writeKubeconfigFile(config: KubeConfig, kubeconfigPath: string):
   }
 
   try {
-    let target = kubeconfigPath;
-    let mode = NEW_FILE_MODE;
-    let currentStat: ReturnType<typeof statSync> | undefined;
+    const target = resolveWriteTarget(kubeconfigPath);
 
-    try {
-      target = realpathSync(kubeconfigPath);
-      currentStat = statSync(target);
-      mode = currentStat.mode & 0o777;
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") throw error;
-    }
+    withLock(target, () => {
+      let mode = NEW_FILE_MODE;
+      let currentStat: ReturnType<typeof statSync> | undefined;
+      try {
+        currentStat = statSync(target);
+        mode = currentStat.mode & 0o777;
+      } catch (error) {
+        if (errorCode(error) !== "ENOENT") throw error;
+      }
 
-    const candidate = sources.get(config);
-    const source = candidate?.path === target ? candidate : undefined;
+      const candidate = sources.get(config);
+      const source = candidate?.path === target ? candidate : undefined;
 
-    if (source && (!currentStat || currentStat.mtimeMs !== source.mtimeMs || currentStat.size !== source.size)) {
-      throw new KubeconfigError(
-        "Kubeconfig changed on disk while it was being edited",
-        "Another tool modified the file. Retry the action"
-      );
-    }
+      if (source && (!currentStat || currentStat.mtimeMs !== source.mtimeMs || currentStat.size !== source.size)) {
+        throw new KubeconfigError(
+          "Kubeconfig changed on disk while it was being edited",
+          "Another tool modified the file. Retry the action"
+        );
+      }
 
-    const doc = source ? source.doc : new Document(config);
-    if (source) {
-      doc.contents = syncNode(doc.contents, config, doc) as Document["contents"];
-    }
+      // Sync into a copy so a failed write leaves the remembered document untouched
+      let doc: Document;
+      if (source) {
+        doc = source.doc.clone();
+        doc.contents = syncNode(doc.contents, config, doc) as Document["contents"];
+      } else {
+        doc = new Document(config);
+      }
 
-    const content = doc.toString({ flowCollectionPadding: false });
-    if (!content.trim()) {
-      throw new KubeconfigError("Empty kubeconfig content", "Configuration data appears to be empty");
-    }
+      const content = doc.toString({ flowCollectionPadding: false });
+      if (!content.trim()) {
+        throw new KubeconfigError("Empty kubeconfig content", "Configuration data appears to be empty");
+      }
 
-    atomicWrite(target, content, mode);
+      atomicWrite(target, content, mode);
 
-    const written = statSync(target);
-    sources.set(config, { doc, path: target, mtimeMs: written.mtimeMs, size: written.size });
+      const written = statSync(target);
+      sources.set(config, { doc, path: target, mtimeMs: written.mtimeMs, size: written.size });
+    });
   } catch (error) {
     if (error instanceof KubeconfigError || error instanceof ValidationError) {
       throw error;
