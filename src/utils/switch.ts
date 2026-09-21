@@ -4,6 +4,7 @@ import { showErrorToast } from "./errors";
 import { getPreferences } from "./preferences";
 import { rememberPreviousContext } from "./previous-context";
 import { rememberNamespace } from "./recent-namespaces";
+import { rememberContext } from "./recents";
 
 export interface SwitchOptions {
   contextName: string;
@@ -49,6 +50,7 @@ export async function switchAndClose(perform: () => Promise<unknown>, opts: Swit
   // The kubeconfig is already updated; feedback problems must not turn that into a failure
   try {
     await rememberPreviousContext(opts.fromContext, opts.contextName);
+    await rememberContext(opts.contextName);
     if (opts.namespace) await rememberNamespace(opts.contextName, opts.namespace);
 
     const message = formatSwitchMessage(opts.contextName, opts.namespace);

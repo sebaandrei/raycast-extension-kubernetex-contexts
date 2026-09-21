@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(),
   confirmAlert: vi.fn(),
   rememberNamespace: vi.fn(),
+  rememberContext: vi.fn(),
 }));
 
 vi.mock("@raycast/api", () => ({
@@ -23,6 +24,7 @@ vi.mock("@raycast/api", () => ({
 }));
 vi.mock("../errors", () => ({ showErrorToast: mocks.showErrorToast }));
 vi.mock("../recent-namespaces", () => ({ rememberNamespace: mocks.rememberNamespace }));
+vi.mock("../recents", () => ({ rememberContext: mocks.rememberContext }));
 vi.mock("../preferences", () => ({ getPreferences: mocks.getPreferences }));
 
 import { KubeconfigError } from "../kubeconfig-errors";
@@ -32,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getPreferences.mockReturnValue({ closeAfterSwitch: true });
   mocks.confirmAlert.mockResolvedValue(true);
+  mocks.rememberContext.mockResolvedValue(undefined);
 });
 
 describe("formatSwitchMessage", () => {
@@ -127,6 +130,29 @@ describe("switchAndClose", () => {
     mocks.rememberNamespace.mockRejectedValue(new Error("storage down"));
 
     const ok = await switchAndClose(async () => true, { contextName: "b", namespace: "ns", fromContext: "a" });
+
+    expect(ok).toBe(true);
+    expect(mocks.showErrorToast).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("records the context as recent on success only", async () => {
+    await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
+    expect(mocks.rememberContext).toHaveBeenCalledWith("b");
+
+    mocks.rememberContext.mockClear();
+    await switchAndClose(async () => false, { contextName: "b", fromContext: "a" });
+    await switchAndClose(() => Promise.reject(new Error("x")), { contextName: "b", fromContext: "a" });
+    mocks.confirmAlert.mockResolvedValue(false);
+    await switchAndClose(async () => true, { contextName: "prod-eu", fromContext: "a" });
+    expect(mocks.rememberContext).not.toHaveBeenCalled();
+  });
+
+  it("does not fail the switch when recording the recent context throws", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.rememberContext.mockRejectedValue(new Error("storage down"));
+
+    const ok = await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
 
     expect(ok).toBe(true);
     expect(mocks.showErrorToast).not.toHaveBeenCalled();

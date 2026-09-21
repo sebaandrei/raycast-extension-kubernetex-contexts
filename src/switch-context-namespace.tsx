@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { List, ActionPanel, Action, useNavigation, Icon } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
@@ -13,6 +13,9 @@ import {
   serverLabel,
 } from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
+import { usePinnedRecent } from "./hooks/usePinnedRecent";
+import { buildSections } from "./utils/context-sections";
+import { KubernetesContext } from "./types";
 
 export default function SwitchContextWithNamespace() {
   const { contexts, currentContext, namespaces, isLoading, error, refresh, switchContextWithNamespace } =
@@ -45,7 +48,48 @@ export default function SwitchContextWithNamespace() {
   const isProd = useProductionMatcher();
 
   // Filter out current context since we're on a switch-specific screen
-  const availableContexts = contexts.filter((ctx) => !ctx.current);
+  const availableContexts = useMemo(() => contexts.filter((ctx) => !ctx.current), [contexts]);
+  const { pinned, recent, toggle } = usePinnedRecent();
+  const sections = useMemo(
+    () => buildSections({ contexts: availableContexts, pinned, recent }),
+    [availableContexts, pinned, recent]
+  );
+  const pinnedNames = useMemo(() => new Set(pinned), [pinned]);
+
+  const renderItem = (context: KubernetesContext) => (
+    <List.Item
+      key={context.name}
+      icon={contextIcon(context, isProd(context.name))}
+      title={context.name}
+      subtitle={{ value: contextSubtitle(context), tooltip: serverLabel(context) }}
+      keywords={contextKeywords(context)}
+      accessories={[
+        ...prodAccessory(isProd(context.name)),
+        { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
+      ]}
+      actions={
+        <ActionPanel>
+          <Action title={`Switch with Namespace Selection`} onAction={() => handleContextSelect(context.name)} />
+          <Action
+            title={`Quick Switch to ${context.name}`}
+            onAction={() => handleQuickSwitch(context.name)}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
+          />
+          <Action.Push
+            title={`View ${context.name} Details`}
+            icon={Icon.Info}
+            target={<ContextDetails context={context} onSwitch={handleQuickSwitch} />}
+          />
+          <Action
+            title={pinnedNames.has(context.name) ? "Unpin Context" : "Pin Context"}
+            icon={pinnedNames.has(context.name) ? Icon.PinDisabled : Icon.Pin}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+            onAction={() => toggle(context.name)}
+          />
+        </ActionPanel>
+      }
+    />
+  );
 
   return (
     <List
@@ -54,34 +98,17 @@ export default function SwitchContextWithNamespace() {
       onSearchTextChange={setSearchText}
       searchBarPlaceholder="Search contexts to switch to"
     >
-      {availableContexts.map((context) => (
-        <List.Item
-          key={context.name}
-          icon={contextIcon(context, isProd(context.name))}
-          title={context.name}
-          subtitle={{ value: contextSubtitle(context), tooltip: serverLabel(context) }}
-          keywords={contextKeywords(context)}
-          accessories={[
-            ...prodAccessory(isProd(context.name)),
-            { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
-          ]}
-          actions={
-            <ActionPanel>
-              <Action title={`Switch with Namespace Selection`} onAction={() => handleContextSelect(context.name)} />
-              <Action
-                title={`Quick Switch to ${context.name}`}
-                onAction={() => handleQuickSwitch(context.name)}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "enter" }}
-              />
-              <Action.Push
-                title={`View ${context.name} Details`}
-                icon={Icon.Info}
-                target={<ContextDetails context={context} onSwitch={handleQuickSwitch} />}
-              />
-            </ActionPanel>
-          }
-        />
-      ))}
+      {[
+        { title: "Pinned", items: sections.pinned },
+        { title: "Recent", items: sections.recent },
+        { title: "All Contexts", items: sections.all },
+      ]
+        .filter((section) => section.items.length > 0)
+        .map((section) => (
+          <List.Section key={section.title} title={section.title}>
+            {section.items.map(renderItem)}
+          </List.Section>
+        ))}
 
       {contexts.length > 0 && availableContexts.length === 0 ? (
         <List.EmptyView
