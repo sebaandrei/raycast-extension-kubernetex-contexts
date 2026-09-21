@@ -57,7 +57,7 @@ export function readKubeconfig(kubeconfigPath: string = getKubeconfigPath()): Ku
     if (!existsSync(kubeconfigPath)) {
       throw new KubeconfigError(
         `Kubeconfig file not found at ${kubeconfigPath}`,
-        "Create a kubeconfig file or set the Kubeconfig Path in the extension preferences"
+        "Create a kubeconfig file, set the Kubeconfig Path in the extension preferences, or set the KUBECONFIG environment variable"
       );
     }
 
