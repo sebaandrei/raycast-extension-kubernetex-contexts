@@ -28,6 +28,8 @@ declare namespace Preferences {
   export type SwitchContextNamespace = ExtensionPreferences & {}
   /** Preferences accessible in the `manage-contexts` command */
   export type ManageContexts = ExtensionPreferences & {}
+  /** Preferences accessible in the `previous-context` command */
+  export type PreviousContext = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
@@ -39,5 +41,7 @@ declare namespace Arguments {
   export type SwitchContextNamespace = {}
   /** Arguments passed to the `manage-contexts` command */
   export type ManageContexts = {}
+  /** Arguments passed to the `previous-context` command */
+  export type PreviousContext = {}
 }
 

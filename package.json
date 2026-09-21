@@ -71,6 +71,12 @@
       "title": "Manage Contexts",
       "description": "Complete context lifecycle management: create, modify, and delete with validation",
       "mode": "view"
+    },
+    {
+      "name": "previous-context",
+      "title": "Switch to Previous Context",
+      "description": "Toggle back to the previously used Kubernetes context",
+      "mode": "no-view"
     }
   ],
   "dependencies": {
