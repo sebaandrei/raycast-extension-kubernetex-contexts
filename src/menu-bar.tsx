@@ -11,9 +11,19 @@ import { switchAndClose } from "./utils/switch";
 
 const SUBMENU_THRESHOLD = 10;
 
+// The menu bar has no window, so problems are reported with a HUD
+async function reportHud(message: string, err: unknown) {
+  console.error(`${message}:`, err);
+  await showHUD(message).catch(() => undefined);
+}
+
 async function copyValue(label: string, value: string) {
-  await Clipboard.copy(value);
-  await showHUD(`Copied ${label}`);
+  try {
+    await Clipboard.copy(value);
+    await showHUD(`Copied ${label}`);
+  } catch (err) {
+    await reportHud(`Could not copy ${label}`, err);
+  }
 }
 
 // The menu bar has no file watcher: it reloads on the command interval (1m) and whenever it is opened.
@@ -25,19 +35,35 @@ export default function Command() {
   const sections = useMemo(() => buildSections({ contexts, pinned, recent }), [contexts, pinned, recent]);
   const current = contexts.find((c) => c.current) ?? contexts.find((c) => c.name === currentContext);
 
-  const openKubeconfig = () => open(getKubeconfigPath());
+  const openKubeconfig = async () => {
+    try {
+      await open(getKubeconfigPath());
+    } catch (err) {
+      await reportHud("Could not open kubeconfig", err);
+    }
+  };
+  const refreshMenu = async () => {
+    try {
+      await refresh();
+    } catch (err) {
+      await reportHud("Could not refresh contexts", err);
+    }
+  };
   const footer = (
     <MenuBarExtra.Section>
       <MenuBarExtra.Item title="Open Kubeconfig" icon={Icon.Document} onAction={openKubeconfig} />
-      <MenuBarExtra.Item title="Refresh" icon={Icon.ArrowClockwise} onAction={() => refresh()} />
+      <MenuBarExtra.Item title="Refresh" icon={Icon.ArrowClockwise} onAction={refreshMenu} />
     </MenuBarExtra.Section>
   );
 
   if (error) {
+    // Typed errors (KubeconfigError / ValidationError) carry a hint for the user
+    const errorAction = "action" in error && typeof error.action === "string" ? error.action : undefined;
     return (
       <MenuBarExtra isLoading={isLoading} icon={Icon.Warning} title="Kubeconfig error" tooltip={error.message}>
         <MenuBarExtra.Section>
           <MenuBarExtra.Item title={error.message} />
+          {errorAction && <MenuBarExtra.Item title={errorAction} />}
         </MenuBarExtra.Section>
         {footer}
       </MenuBarExtra>

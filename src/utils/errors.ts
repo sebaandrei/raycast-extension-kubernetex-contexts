@@ -7,7 +7,7 @@ export { KubeconfigError, ValidationError };
  * Enhanced error types for better user guidance
  */
 export interface KubeError {
-  type: "kubeconfig" | "context" | "permission" | "file" | "yaml" | "network" | "validation" | "unknown";
+  type: "kubeconfig" | "context" | "permission" | "file" | "yaml" | "validation" | "unknown";
   title: string;
   message: string;
   action?: string;
@@ -16,8 +16,27 @@ export interface KubeError {
 /**
  * Analyzes error and returns structured error information
  */
-function analyzeError(error: Error): KubeError {
+export function analyzeError(error: Error): KubeError {
   const errorMsg = error.message.toLowerCase();
+
+  // Context-specific errors
+  if (errorMsg.includes("context") && (errorMsg.includes("not found") || errorMsg.includes("does not exist"))) {
+    return {
+      type: "context",
+      title: "Context Not Found",
+      message: "The specified context does not exist",
+      action: "Check available contexts or update your kubeconfig",
+    };
+  }
+
+  if (errorMsg.includes("context") && errorMsg.includes("already exists")) {
+    return {
+      type: "validation",
+      title: "Context Already Exists",
+      message: "A context with this name already exists",
+      action: "Choose a different name or modify the existing context",
+    };
+  }
 
   // File system errors
   if (errorMsg.includes("enoent") || errorMsg.includes("not found")) {
@@ -45,35 +64,6 @@ function analyzeError(error: Error): KubeError {
       title: "Invalid Kubeconfig",
       message: "Kubeconfig file contains invalid YAML",
       action: "Check your kubeconfig syntax or regenerate the file",
-    };
-  }
-
-  // Context-specific errors
-  if (errorMsg.includes("context") && (errorMsg.includes("not found") || errorMsg.includes("does not exist"))) {
-    return {
-      type: "context",
-      title: "Context Not Found",
-      message: "The specified context does not exist",
-      action: "Check available contexts or update your kubeconfig",
-    };
-  }
-
-  if (errorMsg.includes("context") && errorMsg.includes("already exists")) {
-    return {
-      type: "validation",
-      title: "Context Already Exists",
-      message: "A context with this name already exists",
-      action: "Choose a different name or modify the existing context",
-    };
-  }
-
-  // Network/cluster errors
-  if (errorMsg.includes("timeout") || errorMsg.includes("network") || errorMsg.includes("connection")) {
-    return {
-      type: "network",
-      title: "Connection Error",
-      message: "Unable to connect to cluster",
-      action: "Check your network connection and cluster availability",
     };
   }
 
@@ -107,25 +97,32 @@ function analyzeError(error: Error): KubeError {
 }
 
 /**
- * Shows an enhanced error toast with actionable guidance
+ * Shows an enhanced error toast with actionable guidance. Accepts anything that
+ * can be thrown and never throws itself (safe to call from catch blocks).
  */
-export async function showErrorToast(error: Error): Promise<void> {
-  // Typed errors already carry a specific message and next step
-  const kubeError: KubeError =
-    error instanceof KubeconfigError || error instanceof ValidationError
+export async function showErrorToast(error: unknown): Promise<void> {
+  try {
+    const normalized = error instanceof Error ? error : new Error(String(error));
+    // Typed errors already carry a specific message and next step
+    const isTyped = normalized instanceof KubeconfigError || normalized instanceof ValidationError;
+    if (!isTyped) console.error("Unhandled error:", error);
+    const kubeError: KubeError = isTyped
       ? {
-          type: error instanceof ValidationError ? "validation" : "kubeconfig",
-          title: error instanceof ValidationError ? "Validation Error" : "Kubeconfig Error",
-          message: error.message,
-          action: error.action,
+          type: normalized instanceof ValidationError ? "validation" : "kubeconfig",
+          title: normalized instanceof ValidationError ? "Validation Error" : "Kubeconfig Error",
+          message: normalized.message,
+          action: normalized.action,
         }
-      : analyzeError(error);
+      : analyzeError(normalized);
 
-  await showToast({
-    style: Toast.Style.Failure,
-    title: kubeError.title,
-    message: kubeError.action ? `${kubeError.message}\n${kubeError.action}` : kubeError.message,
-  });
+    await showToast({
+      style: Toast.Style.Failure,
+      title: kubeError.title,
+      message: kubeError.action ? `${kubeError.message}\n${kubeError.action}` : kubeError.message,
+    });
+  } catch (toastError) {
+    console.error("Failed to show error toast:", toastError);
+  }
 }
 
 /**

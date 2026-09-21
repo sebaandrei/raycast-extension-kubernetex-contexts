@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   closeMainWindow: vi.fn(),
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   confirmAlert: vi.fn(),
   rememberNamespace: vi.fn(),
   rememberContext: vi.fn(),
+  reportInvalidPatternOnce: vi.fn(),
 }));
 
 vi.mock("@raycast/api", () => ({
@@ -25,6 +26,10 @@ vi.mock("@raycast/api", () => ({
 vi.mock("../errors", () => ({ showErrorToast: mocks.showErrorToast }));
 vi.mock("../recent-namespaces", () => ({ rememberNamespace: mocks.rememberNamespace }));
 vi.mock("../recents", () => ({ rememberContext: mocks.rememberContext }));
+vi.mock("../environment", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../environment")>()),
+  reportInvalidPatternOnce: mocks.reportInvalidPatternOnce,
+}));
 vi.mock("../preferences", () => ({ getPreferences: mocks.getPreferences }));
 
 import { KubeconfigError } from "../kubeconfig-errors";
@@ -36,6 +41,8 @@ beforeEach(() => {
   mocks.confirmAlert.mockResolvedValue(true);
   mocks.rememberContext.mockResolvedValue(undefined);
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("formatSwitchMessage", () => {
   it("formats without namespace", () => {
@@ -148,14 +155,13 @@ describe("switchAndClose", () => {
   });
 
   it("does not fail the switch when recording the namespace throws", async () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.rememberNamespace.mockRejectedValue(new Error("storage down"));
 
     const ok = await switchAndClose(async () => true, { contextName: "b", namespace: "ns", fromContext: "a" });
 
     expect(ok).toBe(true);
     expect(mocks.showErrorToast).not.toHaveBeenCalled();
-    spy.mockRestore();
   });
 
   it("records the context as recent on success only", async () => {
@@ -171,14 +177,13 @@ describe("switchAndClose", () => {
   });
 
   it("does not fail the switch when recording the recent context throws", async () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.rememberContext.mockRejectedValue(new Error("storage down"));
 
     const ok = await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
 
     expect(ok).toBe(true);
     expect(mocks.showErrorToast).not.toHaveBeenCalled();
-    spy.mockRestore();
   });
 
   it("treats a false result as a failed switch", async () => {
@@ -191,14 +196,105 @@ describe("switchAndClose", () => {
   });
 
   it("still reports success when closing or the HUD fails", async () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.closeMainWindow.mockRejectedValue(new Error("no window"));
 
     const ok = await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
 
     expect(ok).toBe(true);
     expect(mocks.showErrorToast).not.toHaveBeenCalled();
-    spy.mockRestore();
+  });
+
+  it("resolves false without rejecting when perform rejects with a non-Error", async () => {
+    await expect(switchAndClose(() => Promise.reject("boom"), { contextName: "b", fromContext: "a" })).resolves.toBe(
+      false
+    );
+    expect(mocks.showErrorToast).toHaveBeenCalledWith("boom");
+  });
+
+  it("does not reject when showErrorToast itself rejects", async () => {
+    mocks.showErrorToast.mockRejectedValue(new Error("toast failed"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(switchAndClose(async () => false, { contextName: "b", fromContext: "a" })).resolves.toBe(false);
+  });
+
+  it("reports failures with a HUD when closeWindow is false", async () => {
+    const ok = await switchAndClose(() => Promise.reject(new Error("boom")), {
+      contextName: "b",
+      fromContext: "a",
+      closeWindow: false,
+    });
+    expect(ok).toBe(false);
+    expect(mocks.showHUD).toHaveBeenCalledWith("Failed: boom");
+    expect(mocks.showErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("does not reject when the failure HUD itself rejects", async () => {
+    mocks.showHUD.mockRejectedValue(new Error("hud down"));
+    await expect(
+      switchAndClose(async () => false, { contextName: "b", fromContext: "a", closeWindow: false })
+    ).resolves.toBe(false);
+  });
+
+  it("uses a HUD when the production confirmation fails and closeWindow is false", async () => {
+    mocks.confirmAlert.mockRejectedValue(new Error("alert failed"));
+    const ok = await switchAndClose(async () => true, {
+      contextName: "prod-eu",
+      fromContext: "dev",
+      closeWindow: false,
+    });
+    expect(ok).toBe(false);
+    expect(mocks.showHUD).toHaveBeenCalledWith("Failed: alert failed");
+    expect(mocks.showErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("logs and falls back to a success toast when the feedback fails", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.closeMainWindow.mockRejectedValue(new Error("no window"));
+
+    const ok = await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
+
+    expect(ok).toBe(true);
+    expect(spy).toHaveBeenCalledWith("Switched to b but failed to show feedback:", expect.any(Error));
+    expect(mocks.showToast).toHaveBeenCalledWith({
+      style: "success",
+      title: "Context Switched",
+      message: "Switched to b",
+    });
+  });
+
+  it("still resolves true when the fallback toast fails too", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.closeMainWindow.mockRejectedValue(new Error("no window"));
+    mocks.showToast.mockRejectedValue(new Error("no toast"));
+    await expect(switchAndClose(async () => true, { contextName: "b", fromContext: "a" })).resolves.toBe(true);
+  });
+
+  it("does not record the previous context when the production switch is cancelled", async () => {
+    mocks.confirmAlert.mockResolvedValue(false);
+    await switchAndClose(async () => true, { contextName: "prod-eu", fromContext: "dev" });
+    expect(mocks.setItem).not.toHaveBeenCalled();
+  });
+
+  it("honours a custom productionPattern preference", async () => {
+    mocks.getPreferences.mockReturnValue({ closeAfterSwitch: true, productionPattern: "^critical" });
+    await switchAndClose(async () => true, { contextName: "prod-eu", fromContext: "dev" });
+    expect(mocks.confirmAlert).not.toHaveBeenCalled();
+
+    await switchAndClose(async () => true, { contextName: "critical-1", fromContext: "dev" });
+    expect(mocks.confirmAlert).toHaveBeenCalledOnce();
+  });
+
+  it("reports an invalid production pattern and falls back to the default", async () => {
+    mocks.getPreferences.mockReturnValue({ closeAfterSwitch: true, productionPattern: "(" });
+    await switchAndClose(async () => true, { contextName: "prod-eu", fromContext: "dev" });
+    expect(mocks.reportInvalidPatternOnce).toHaveBeenCalled();
+    expect(mocks.confirmAlert).toHaveBeenCalledOnce();
+  });
+
+  it("does not report a valid pattern", async () => {
+    await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
+    expect(mocks.reportInvalidPatternOnce).not.toHaveBeenCalled();
   });
 
   describe("production guard", () => {

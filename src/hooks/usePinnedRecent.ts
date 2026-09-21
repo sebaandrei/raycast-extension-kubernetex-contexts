@@ -10,7 +10,9 @@ const load = async () => ({ pinned: await getPinnedContexts(), recent: await get
  * Pass the names of all existing contexts so stale pins do not count towards the limit.
  */
 export function usePinnedRecent() {
-  const { data, revalidate } = useCachedPromise(load, [], { onError: () => undefined });
+  const { data, revalidate } = useCachedPromise(load, [], {
+    onError: (err) => console.error("Failed to load pinned and recent contexts:", err),
+  });
   const busy = useRef(false);
 
   const toggle = useCallback(

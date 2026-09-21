@@ -4,7 +4,6 @@ import {
   getKubeconfigPath,
   KubeconfigState,
   loadKubeconfigState,
-  setContextNamespace,
   switchToContext,
   switchToContextWithNamespace,
 } from "../utils/kubeconfig-direct";
@@ -41,12 +40,13 @@ export function useKubeconfig() {
     mutate,
   } = useCachedPromise(loadState, [getKubeconfigPath()], {
     // Callers render the error themselves; avoid a duplicate default toast
-    onError: () => undefined,
+    onError: (err) => console.error("Failed to load kubeconfig:", err),
   });
 
   // A failed refresh must show the error, not the stale contexts kept by the cache
   const data = error ? undefined : cached;
 
+  // Always resolves true: failures are thrown by `mutate` and reach the caller as rejections
   const run = useCallback(
     async (operation: () => void, optimisticUpdate?: StateUpdate) => {
       await mutate(
@@ -68,11 +68,6 @@ export function useKubeconfig() {
   const switchContextWithNamespace = useCallback(
     (contextName: string, namespace?: string) =>
       run(() => switchToContextWithNamespace(contextName, namespace), withCurrentContext(contextName, namespace)),
-    [run]
-  );
-
-  const setNamespace = useCallback(
-    (contextName: string, namespace: string) => run(() => setContextNamespace(contextName, namespace)),
     [run]
   );
 
@@ -98,7 +93,6 @@ export function useKubeconfig() {
     error,
     switchContext,
     switchContextWithNamespace,
-    setNamespace,
     refresh: revalidate,
   };
 }

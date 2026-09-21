@@ -5,6 +5,10 @@ import { getPreviousContext } from "./utils/previous-context";
 import { resolvePreviousSwitch } from "./utils/previous-switch";
 import { switchAndClose } from "./utils/switch";
 
+/**
+ * Switches back to the previous context. Only switches made through this extension are
+ * tracked; contexts changed with kubectl or other tools are not.
+ */
 export default async function Command() {
   let result;
   let current: string | null;
@@ -14,7 +18,8 @@ export default async function Command() {
     const available = getAllContexts().map((c) => c.name);
     result = resolvePreviousSwitch({ previous, current, available });
   } catch (err) {
-    await showErrorToast(err as Error);
+    console.error("Failed to resolve previous context:", err);
+    await showErrorToast(err);
     return;
   }
 
