@@ -35,7 +35,7 @@
 - Kubeconfig writes are atomic (temp file and rename), preserve comments, formatting and file mode (0600 for new files), and follow symlinks
 - Writes take `<kubeconfig>.lock`, shared with kubectl, and refuse to overwrite a file whose modification time or size changed since it was read
 - No backup file is left behind
-- Resolve all `npm audit` vulnerabilities
+- Resolve `npm audit` findings in runtime dependencies (`npm audit --omit=dev` is clean; one moderate advisory remains in the dev-only vitest test runner)
 
 ## [1.0.0] - {PR_MERGE_DATE}
 
