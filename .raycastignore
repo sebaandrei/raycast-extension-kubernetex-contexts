@@ -3,3 +3,5 @@ CLAUDE.md
 .DS_Store
 node_modules/
 .git/
+src/**/__tests__/
+vitest.config.ts
