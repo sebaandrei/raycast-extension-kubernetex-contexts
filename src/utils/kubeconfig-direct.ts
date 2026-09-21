@@ -254,7 +254,7 @@ export function getAllContexts(): KubernetesContext[] {
     user: ctx.context.user,
     namespace: ctx.context.namespace,
     current: ctx.name === currentContext,
-    clusterDetails: getClusterDetails(ctx.context.cluster, config),
+    clusterDetails: getClusterDetails(ctx.context.cluster, config) ?? undefined,
     userAuthMethod: getUserAuthMethod(ctx.context.user, config),
   }));
 }
