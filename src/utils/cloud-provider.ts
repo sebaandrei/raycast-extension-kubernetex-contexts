@@ -1,13 +1,11 @@
 export type CloudProvider = "EKS" | "AKS" | "GKE";
 
+// Only executables that are specific to one provider; generic CLIs (az, gcloud, aws-vault)
+// are used for many other purposes and would cause false badges
 const EXEC_PROVIDERS: Record<string, CloudProvider> = {
-  aws: "EKS",
   "aws-iam-authenticator": "EKS",
-  "aws-vault": "EKS",
   kubelogin: "AKS",
-  az: "AKS",
   "gke-gcloud-auth-plugin": "GKE",
-  gcloud: "GKE",
 };
 
 function basename(command: string): string {
@@ -40,8 +38,11 @@ export function detectCloudProvider(input: {
   server?: string;
 }): CloudProvider | undefined {
   if (input.execCommand) {
-    const provider = EXEC_PROVIDERS[basename(input.execCommand)];
+    const name = basename(input.execCommand);
+    const provider = EXEC_PROVIDERS[name];
     if (provider) return provider;
+    // `aws` is generic; `aws eks get-token` is the EKS auth flow
+    if (name === "aws" && input.execArgs?.includes("eks")) return "EKS";
   }
   return input.server ? providerFromHost(hostOf(input.server)) : undefined;
 }

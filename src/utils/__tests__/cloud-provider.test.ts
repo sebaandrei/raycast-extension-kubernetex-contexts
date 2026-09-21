@@ -3,21 +3,29 @@ import { detectCloudProvider } from "../cloud-provider";
 
 describe("detectCloudProvider", () => {
   it.each([
-    ["aws", "EKS"],
     ["aws-iam-authenticator", "EKS"],
-    ["aws-vault", "EKS"],
     ["kubelogin", "AKS"],
-    ["az", "AKS"],
     ["gke-gcloud-auth-plugin", "GKE"],
-    ["gcloud", "GKE"],
   ])("maps exec %s to %s", (execCommand, expected) => {
     expect(detectCloudProvider({ execCommand })).toBe(expected);
   });
 
   it("uses the basename, case-insensitively", () => {
-    expect(detectCloudProvider({ execCommand: "/usr/local/bin/AWS" })).toBe("EKS");
+    expect(detectCloudProvider({ execCommand: "/usr/local/bin/KubeLogin" })).toBe("AKS");
     expect(detectCloudProvider({ execCommand: "C:\\tools\\kubelogin.exe" })).toBe("AKS");
     expect(detectCloudProvider({ execCommand: "/opt/gcloud/bin/gke-gcloud-auth-plugin" })).toBe("GKE");
+  });
+
+  it("treats aws as EKS only for the eks auth flow", () => {
+    expect(detectCloudProvider({ execCommand: "aws", execArgs: ["eks", "get-token"] })).toBe("EKS");
+    expect(detectCloudProvider({ execCommand: "aws", execArgs: ["sts", "get-caller-identity"] })).toBeUndefined();
+    expect(detectCloudProvider({ execCommand: "aws" })).toBeUndefined();
+  });
+
+  it("does not badge generic CLIs", () => {
+    for (const execCommand of ["az", "gcloud", "aws-vault"]) {
+      expect(detectCloudProvider({ execCommand })).toBeUndefined();
+    }
   });
 
   it("does not match on substrings", () => {

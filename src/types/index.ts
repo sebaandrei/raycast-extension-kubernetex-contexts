@@ -1,3 +1,5 @@
+import type { CloudProvider } from "../utils/cloud-provider";
+
 // Kubernetes cluster metadata
 export interface ClusterDetails {
   name: string;
@@ -18,7 +20,7 @@ export interface KubernetesContext {
   current?: boolean;
   clusterDetails?: ClusterDetails;
   userAuthMethod?: string;
-  cloudProvider?: string;
+  cloudProvider?: CloudProvider;
 }
 
 export interface ContextListItem {

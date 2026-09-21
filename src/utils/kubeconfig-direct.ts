@@ -91,7 +91,7 @@ export function getUserAuthMethod(userName: string, config?: KubeConfig) {
     return "Unknown";
   }
 
-  const userConfig = user.user;
+  const userConfig = user.user ?? {};
 
   if (userConfig.token) return "Token";
   if (userConfig.tokenFile) return "Token File";
@@ -115,7 +115,7 @@ export function getAllContexts(config: KubeConfig = readKubeconfig()): Kubernete
 
   return config.contexts.map((ctx) => {
     const clusterDetails = getClusterDetails(ctx.context.cluster, config) ?? undefined;
-    const exec = config.users?.find((u) => u.name === ctx.context.user)?.user.exec;
+    const exec = config.users?.find((u) => u.name === ctx.context.user)?.user?.exec;
     const cloudProvider = detectCloudProvider({
       execCommand: typeof exec?.command === "string" ? exec.command : undefined,
       execArgs: Array.isArray(exec?.args) ? exec.args.filter((a): a is string => typeof a === "string") : undefined,
