@@ -3,6 +3,8 @@ import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
+import { contextIcon, prodAccessory } from "./components/context-visuals";
+import { getProductionMatcher } from "./utils/environment";
 
 export default function SwitchContextWithNamespace() {
   const { contexts, currentContext, namespaces, isLoading, error, switchContextWithNamespace } = useKubeconfig();
@@ -29,6 +31,8 @@ export default function SwitchContextWithNamespace() {
   const handleQuickSwitch = (contextName: string) =>
     switchAndClose(() => switchContextWithNamespace(contextName), { contextName, fromContext: currentContext });
 
+  const isProd = getProductionMatcher();
+
   if (error) {
     return (
       <List>
@@ -51,8 +55,10 @@ export default function SwitchContextWithNamespace() {
       {availableContexts.map((context) => (
         <List.Item
           key={context.name}
+          icon={contextIcon(context, isProd(context.name))}
           title={context.name}
           subtitle={`Cluster: ${context.cluster} • User: ${context.user} • Namespace: ${context.namespace || "default"}`}
+          accessories={prodAccessory(isProd(context.name))}
           actions={
             <ActionPanel>
               <Action title={`Switch with Namespace Selection`} onAction={() => handleContextSelect(context.name)} />

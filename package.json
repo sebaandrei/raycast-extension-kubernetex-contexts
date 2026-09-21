@@ -42,7 +42,7 @@
       "type": "textfield",
       "required": false,
       "title": "Production Pattern",
-      "description": "Case-insensitive regular expression. Matching context names are treated as production and require confirmation before switching.",
+      "description": "Case-insensitive regular expression tested against the context name (substring match; use ^ and $ to anchor, e.g. ^prod-). Matching contexts are treated as production and require confirmation before switching. Leave empty to disable.",
       "default": "prod|prd|live",
       "placeholder": "prod|prd|live"
     }

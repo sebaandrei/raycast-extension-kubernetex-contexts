@@ -12,7 +12,7 @@ type ExtensionPreferences = {
   "kubeconfigPath"?: string,
   /** Switching - Return to the main Raycast window after a successful context switch. */
   "closeAfterSwitch": boolean,
-  /** Production Pattern - Case-insensitive regular expression. Matching context names are treated as production and require confirmation before switching. */
+  /** Production Pattern - Case-insensitive regular expression tested against the context name (substring match; use ^ and $ to anchor, e.g. ^prod-). Matching contexts are treated as production and require confirmation before switching. Leave empty to disable. */
   "productionPattern": string
 }
 

@@ -8,10 +8,13 @@ const mocks = vi.hoisted(() => ({
   getItem: vi.fn(),
   showErrorToast: vi.fn(),
   getPreferences: vi.fn(),
+  confirmAlert: vi.fn(),
 }));
 
 vi.mock("@raycast/api", () => ({
   closeMainWindow: mocks.closeMainWindow,
+  confirmAlert: mocks.confirmAlert,
+  Alert: { ActionStyle: { Destructive: "destructive" } },
   showHUD: mocks.showHUD,
   showToast: mocks.showToast,
   Toast: { Style: { Success: "success", Failure: "failure", Animated: "animated" } },
@@ -26,6 +29,7 @@ import { formatSwitchMessage, switchAndClose } from "../switch";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getPreferences.mockReturnValue({ closeAfterSwitch: true });
+  mocks.confirmAlert.mockResolvedValue(true);
 });
 
 describe("formatSwitchMessage", () => {
@@ -120,5 +124,53 @@ describe("switchAndClose", () => {
     expect(ok).toBe(true);
     expect(mocks.showErrorToast).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+
+  describe("production guard", () => {
+    beforeEach(() => {
+      mocks.closeMainWindow.mockReset();
+    });
+
+    it("asks for confirmation and proceeds when confirmed", async () => {
+      const perform = vi.fn().mockResolvedValue(true);
+
+      const ok = await switchAndClose(perform, { contextName: "prod-eu", fromContext: "dev" });
+
+      expect(ok).toBe(true);
+      expect(mocks.confirmAlert).toHaveBeenCalledOnce();
+      expect(mocks.confirmAlert.mock.calls[0][0].primaryAction).toEqual({
+        title: "Switch to Production",
+        style: "destructive",
+      });
+      expect(perform).toHaveBeenCalledOnce();
+      expect(mocks.showHUD).toHaveBeenCalledWith("Switched to prod-eu");
+    });
+
+    it("does nothing and returns false when cancelled", async () => {
+      mocks.confirmAlert.mockResolvedValue(false);
+      const perform = vi.fn().mockResolvedValue(true);
+
+      const ok = await switchAndClose(perform, { contextName: "prod-eu", fromContext: "dev" });
+
+      expect(ok).toBe(false);
+      expect(perform).not.toHaveBeenCalled();
+      expect(mocks.showHUD).not.toHaveBeenCalled();
+      expect(mocks.showToast).not.toHaveBeenCalled();
+      expect(mocks.showErrorToast).not.toHaveBeenCalled();
+      expect(mocks.closeMainWindow).not.toHaveBeenCalled();
+    });
+
+    it("does not ask when the production context is already current", async () => {
+      const ok = await switchAndClose(async () => true, { contextName: "prod-eu", fromContext: "prod-eu" });
+
+      expect(ok).toBe(true);
+      expect(mocks.confirmAlert).not.toHaveBeenCalled();
+    });
+
+    it("does not ask for non-production contexts", async () => {
+      await switchAndClose(async () => true, { contextName: "staging", fromContext: "dev" });
+
+      expect(mocks.confirmAlert).not.toHaveBeenCalled();
+    });
   });
 });

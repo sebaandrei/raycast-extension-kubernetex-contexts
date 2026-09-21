@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Form, useNavigation, Keyboard } from "@raycast/api";
+import { Alert, List, ActionPanel, Action, Icon, Form, useNavigation, Keyboard, confirmAlert } from "@raycast/api";
 import { useState, useMemo } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { createContext, deleteContext, modifyContext } from "./utils/kubeconfig-direct";
@@ -6,6 +6,8 @@ import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
+import { contextIcon, prodAccessory } from "./components/context-visuals";
+import { getProductionMatcher } from "./utils/environment";
 
 export default function ManageContexts() {
   const { contexts, clusters, users, isLoading, error, refresh, switchContext, currentContext } = useKubeconfig();
@@ -23,7 +25,23 @@ export default function ManageContexts() {
     );
   }, [contexts, searchQuery]);
 
+  const isProd = getProductionMatcher();
+
   async function handleDelete(contextName: string, removeUnused: boolean) {
+    const prod = isProd(contextName);
+    const message = [
+      prod ? `"${contextName}" is a production context. Deleting it cannot be undone.` : `Delete "${contextName}"?`,
+      removeUnused
+        ? "Its cluster and user are also removed when no other context uses them."
+        : "Its cluster and user entries are kept.",
+    ].join(" ");
+    const confirmed = await confirmAlert({
+      title: prod ? "Delete production context?" : "Delete context?",
+      message,
+      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return;
+
     try {
       const { removedCluster, removedUser } = deleteContext(contextName, { removeUnused });
       const removed = [removedCluster && `cluster ${removedCluster}`, removedUser && `user ${removedUser}`].filter(
@@ -71,29 +89,32 @@ export default function ManageContexts() {
       {filteredContexts.map((context) => (
         <List.Item
           key={context.name}
-          icon={context.current ? Icon.CheckCircle : Icon.Circle}
+          icon={contextIcon(context, isProd(context.name))}
           title={context.name}
           subtitle={`Cluster: ${context.cluster} • User: ${context.user}${context.clusterDetails ? ` • ${context.clusterDetails.hostname}:${context.clusterDetails.port}` : ""}`}
           accessories={[
-            {
-              text: `ns: ${context.namespace || "default"}`,
-              tooltip: "Namespace",
-            },
-            {
-              text: context.userAuthMethod || "Unknown",
-              tooltip: "Authentication Method",
-            },
-            context.clusterDetails
-              ? {
-                  text: context.clusterDetails.protocol,
-                  tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
-                }
-              : {},
-            {
-              text: context.current ? "current" : "",
-              tooltip: context.current ? "Active context" : undefined,
-            },
-          ].filter((acc) => acc.text !== undefined)}
+            ...prodAccessory(isProd(context.name)),
+            ...[
+              {
+                text: `ns: ${context.namespace || "default"}`,
+                tooltip: "Namespace",
+              },
+              {
+                text: context.userAuthMethod || "Unknown",
+                tooltip: "Authentication Method",
+              },
+              context.clusterDetails
+                ? {
+                    text: context.clusterDetails.protocol,
+                    tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
+                  }
+                : {},
+              {
+                text: context.current ? "current" : "",
+                tooltip: context.current ? "Active context" : undefined,
+              },
+            ].filter((acc) => acc.text !== undefined),
+          ]}
           actions={
             <ActionPanel>
               <Action.Push

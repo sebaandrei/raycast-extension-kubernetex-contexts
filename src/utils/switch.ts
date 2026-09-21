@@ -1,4 +1,5 @@
-import { closeMainWindow, showHUD, showToast, Toast } from "@raycast/api";
+import { Alert, closeMainWindow, confirmAlert, showHUD, showToast, Toast } from "@raycast/api";
+import { getProductionMatcher } from "./environment";
 import { showErrorToast } from "./errors";
 import { getPreferences } from "./preferences";
 import { rememberPreviousContext } from "./previous-context";
@@ -19,7 +20,15 @@ export function formatSwitchMessage(contextName: string, namespace?: string): st
  * `perform` is the hook operation that actually switches. Never throws.
  */
 export async function switchAndClose(perform: () => Promise<unknown>, opts: SwitchOptions): Promise<boolean> {
-  // Seam: a confirmation step (e.g. production guard) can be added here, before perform().
+  if (opts.contextName !== opts.fromContext && getProductionMatcher()(opts.contextName)) {
+    const confirmed = await confirmAlert({
+      title: "Switch to production?",
+      message: `"${opts.contextName}" looks like a production context. Subsequent kubectl and other commands will target it.`,
+      primaryAction: { title: "Switch to Production", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return false;
+  }
+
   try {
     const result = await perform();
     if (result === false) {

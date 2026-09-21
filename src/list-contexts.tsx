@@ -4,6 +4,8 @@ import { useKubeconfig } from "./hooks/useKubeconfig";
 import { searchAndFilterContexts, addRecentContext, SearchFilters } from "./utils/search-filter";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
+import { contextIcon, prodAccessory } from "./components/context-visuals";
+import { getProductionMatcher } from "./utils/environment";
 
 export default function ListContexts() {
   const { contexts, currentContext, isLoading, error, switchContext } = useKubeconfig();
@@ -23,6 +25,8 @@ export default function ListContexts() {
     if (switched) addRecentContext(contextName);
   };
 
+  const isProd = getProductionMatcher();
+
   if (error) {
     return (
       <List>
@@ -41,10 +45,11 @@ export default function ListContexts() {
       {searchResults.map(({ context, relevanceScore, matchedFields }) => (
         <List.Item
           key={context.name}
-          icon={context.current ? Icon.CheckCircle : Icon.Circle}
+          icon={contextIcon(context, isProd(context.name))}
           title={context.name}
           subtitle={`Cluster: ${context.cluster} • User: ${context.user}${context.clusterDetails ? ` • ${context.clusterDetails.hostname}:${context.clusterDetails.port}` : ""}`}
           accessories={[
+            ...prodAccessory(isProd(context.name)),
             {
               text: `ns: ${context.namespace || "default"}`,
               tooltip: "Namespace",
