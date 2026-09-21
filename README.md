@@ -1,221 +1,73 @@
 # Kubernetes Context Manager
 
-⚡ **Lightning-fast Kubernetes context management for Raycast** - Switch contexts instantly with advanced search, rich metadata display, and comprehensive context lifecycle management.
+A Raycast extension for switching and managing Kubernetes contexts. It reads and edits the kubeconfig file directly, so kubectl does not need to be installed.
 
-> 🚀 **No kubectl required!** Direct kubeconfig manipulation for superior performance and reliability.
+## Commands
 
-## ✨ Features
+| Command | Mode | Description |
+| --- | --- | --- |
+| Kube Contexts | view | List contexts with Raycast's native search (name, cluster, user, namespace, host). Pinned, Recent and All sections. Switch, pin, view details, copy and open actions. |
+| Current Context | view | Details of the active context: server, host, port, protocol, auth method, TLS settings. Quick switching to other contexts. |
+| Switch Context with Namespace | view | Two steps: pick a context, then a namespace. Namespaces come from the kubeconfig; a free-text name (RFC 1123 validated) is also accepted. Recent namespaces are remembered per context. |
+| Manage Contexts | view | Create contexts (TLS verification on by default, insecure is an explicit opt-in), modify cluster, user and namespace of existing ones, delete with confirmation and optional cleanup of the now-unused cluster and user (the active context cannot be deleted from the UI). |
+| Switch to Previous Context | no-view | Toggles between the last two contexts (A and B). |
+| Kubernetes Context | menu bar | Shows the current context and lets you switch. Refreshes every minute and when opened. |
 
-### 🎯 **4 Powerful Commands**
+## Preferences
 
-#### 1. 📋 **Kube Contexts**
-- **Fuzzy search** across name, cluster, user, and namespace
-- **Relevance scoring** with match highlighting
-- **Rich metadata display** - hostname, port, auth method, protocol
-- **One-click context switching** directly from search results
-- **Context details view** for comprehensive information
+| Preference | Description |
+| --- | --- |
+| Kubeconfig Path | Path to the kubeconfig file. Empty: first entry of `$KUBECONFIG`, else `~/.kube/config`. |
+| Close Raycast After Switching | Return to the main Raycast window after a successful switch (default on). |
+| Production Pattern | Case-insensitive regex tested against the context name (default `prod\|prd\|live`, empty disables). Matching contexts get a red icon and PROD tag, and switching to or deleting them asks for confirmation. |
 
-#### 2. 🎯 **Current Context**
-- **Detailed cluster information** with security indicators
-- **Authentication method detection** (Token, Certificates, Basic Auth, etc.)
-- **Quick switching** to other available contexts
-- **Server endpoint details** with protocol information
+## Safety
 
-#### 3. 🔄 **Switch Context with Namespace**
-- **Two-step workflow** - select context, then namespace
-- **Smart namespace discovery** from existing contexts
-- **Combined switching** operation for efficiency
-- **Keyboard shortcuts** for power users
+Writes to the kubeconfig (`src/utils/kubeconfig-io.ts`):
 
-#### 4. 🛠️ **Manage Contexts**
-- **Create contexts** with flexible input options
-- **Modify existing contexts** - rename, change cluster/user/namespace
-- **Delete contexts** with safety validation
-- **Toggle between existing and manual entry** for maximum flexibility
+- Comments and formatting are preserved.
+- Writes are atomic: temp file in the same directory, then rename.
+- File mode is preserved (0600 for newly created files). Symlinks are followed.
+- `<kubeconfig>.lock` is held during a write, the same lock kubectl uses.
+- A write is refused if another tool changed the file since it was read.
+- No backup file is left behind.
 
-## 🚀 **Why Choose This Extension?**
+## Keyboard shortcuts
 
-### **Performance & Reliability**
-- ✅ **No kubectl dependency** - Works without kubectl installed
-- ✅ **Direct kubeconfig manipulation** - 10x faster than shell commands
-- ✅ **Zero subprocess overhead** - No command execution delays
-- ✅ **Automatic error recovery** - Smart backup and restore
+| Shortcut | Where | Action |
+| --- | --- | --- |
+| Cmd+Shift+Enter | Switch Context with Namespace | Quick switch without choosing a namespace |
+| Cmd+Shift+P | Kube Contexts, Switch Context with Namespace | Pin or unpin |
+| Cmd+1 to Cmd+5 | Current Context | Switch to the listed context |
+| Cmd+Shift+C | Context actions | Copy context name |
+| Cmd+Opt+S | Context actions | Copy server URL |
+| Cmd+Opt+K | Context actions | Copy kubectl command |
+| Cmd+R | Lists, Manage Contexts | Refresh |
+| Cmd+E, Ctrl+X, Ctrl+Shift+X | Manage Contexts | Edit, delete, delete and remove unused cluster/user (Raycast common shortcuts) |
 
-### **Rich User Experience**
-- ✅ **Advanced search engine** - Multi-field fuzzy search with relevance scoring
-- ✅ **Comprehensive metadata** - Server endpoints, auth methods, security indicators
-- ✅ **Seamless workflows** - Auto-return to Raycast main after operations
-- ✅ **Enhanced error handling** - Actionable error messages with solutions
+Other actions (details, open kubeconfig, show in Finder) have no shortcut.
 
-### **Developer Friendly**
-- ✅ **Universal compatibility** - Works in any environment with kubeconfig
-- ✅ **Flexible context management** - Create, modify, delete with validation
-- ✅ **TypeScript powered** - Full type safety and IntelliSense
-- ✅ **Production ready** - Comprehensive error handling and edge case coverage
+## Cloud provider badges
 
-## 📦 Installation
+Shown as EKS, AKS or GKE, detected from the user's exec auth command first (`aws-iam-authenticator`, `aws ... eks ...`, `kubelogin`, `gke-gcloud-auth-plugin`), then from the server host (`*.eks.amazonaws.com`, `*.azmk8s.io`, `container.googleapis.com`). Generic CLIs such as `az` or `gcloud` alone do not produce a badge.
 
-### From Raycast Store (Recommended)
-1. Open Raycast
-2. Search for "Kubernetes Context Manager"
-3. Click Install
+Authentication is detected from the user entry: token, client certificate, basic auth, exec, auth provider.
 
-### Manual Installation (Development)
-1. Clone the Raycast extensions repository: `git clone https://github.com/raycast/extensions.git`
-2.  Navigate to the extension directory: `cd extensions/kube-context-manager`
-3. Run `npm install` to install dependencies  
-4. Run `npm run dev` to start development mode
+## Limitations
 
-## 🎮 Usage Guide
+- One kubeconfig file. There is no multi-file merge; when the preference is empty only the first `$KUBECONFIG` entry is used.
+- Namespaces come from the kubeconfig plus typed input. There is no live cluster lookup.
+- The menu bar is refreshed on an interval, not live. There is no file watcher; use Refresh after external changes.
+- Pins and recents are stored locally in Raycast LocalStorage and dropped when a context is renamed or deleted.
 
-### **Quick Start**
-1. Open Raycast (`Cmd + Space`)
-2. Type "Kube Contexts" to see all available contexts
-3. Search for your target context
-4. Press `Enter` to switch instantly
+## Development
 
-### **Command Overview**
-
-| Command | Description |
-|---------|-------------|
-| **Kube Contexts** | Search and switch contexts with advanced filtering |
-| **Current Context** | View current context details and quick actions |
-| **Switch Context with Namespace** | Two-step context + namespace selection |
-| **Manage Contexts** | Full context lifecycle management |
-
-### **Advanced Features**
-
-#### 🔍 **Smart Search**
-- Search across **multiple fields**: name, cluster, user, namespace
-- **Fuzzy matching**: "dev-east" matches "development-us-east-1"
-- **Relevance scoring**: Most relevant matches appear first
-- **Real-time filtering**: Instant results as you type
-
-#### ⚡ **Quick Actions**
-- `Enter` - Switch to selected context
-- `Cmd + Enter` - View context details
-- `Cmd + Shift + Enter` - Quick switch (Switch Context with Namespace)
-- `Cmd + R` - Refresh context list
-
-#### 🛠️ **Context Management**
-- **Create**: Add new contexts with existing or custom cluster/user values
-- **Modify**: Update context properties (name, cluster, user, namespace)
-- **Delete**: Remove contexts with safety validation
-- **Duplicate**: Clone contexts for similar environments
-
-## 🔧 Troubleshooting
-
-### **Common Issues**
-
-#### **"Kubeconfig Not Found"**
-- **Cause**: No kubeconfig file at `~/.kube/config`
-- **Solution**: Create a kubeconfig file or set `KUBECONFIG` environment variable
-- **Commands**: 
-  ```bash
-  mkdir -p ~/.kube
-  # Add your kubeconfig content to ~/.kube/config
-  ```
-
-#### **"Permission Denied"**
-- **Cause**: Incorrect file permissions on kubeconfig
-- **Solution**: Fix file permissions
-- **Commands**:
-  ```bash
-  chmod 600 ~/.kube/config
-  ```
-
-#### **"Invalid YAML Syntax"**
-- **Cause**: Malformed kubeconfig file
-- **Solution**: Validate and fix YAML syntax
-- **Commands**:
-  ```bash
-  # Validate YAML syntax
-  yamllint ~/.kube/config
-  ```
-
-#### **"Context Not Found"**
-- **Cause**: Context doesn't exist in kubeconfig
-- **Solution**: Check available contexts or update kubeconfig
-- **Commands**:
-  ```bash
-  yq '.contexts[].name' ~/.kube/config
-  ```
-
-### **Performance Tips**
-- ✅ Large kubeconfig files (50+ contexts) are handled efficiently
-- ✅ Search performance remains fast with hundreds of contexts
-- ✅ Memory usage is optimized for minimal system impact
-
-## 🏗️ Architecture
-
-### **Core Design**
-- **Direct YAML Manipulation**: No kubectl dependency for 10x faster performance
-- **React Hooks Architecture**: Clean separation of concerns with TypeScript
-- **Enhanced Error Handling**: Comprehensive error analysis with actionable guidance
-- **Backup System**: Automatic kubeconfig backup before any modifications
-
-### **File Structure**
-```
-src/
-├── components/         # Reusable UI components
-├── hooks/             # React hooks for data management
-├── utils/             # Core kubeconfig manipulation
-├── types/             # TypeScript type definitions
-└── [commands].tsx     # Individual Raycast commands
-```
-
-### **Key Technologies**
-- **Raycast API** - Native extension framework
-- **TypeScript** - Type safety and developer experience
-- **YAML Parser** - Direct kubeconfig file manipulation
-- **React Hooks** - State management and data fetching
-
-## 🚀 Development
-
-### **Setup**
 ```bash
-# Install dependencies
 npm install
-
-# Start development mode
-npm run dev
-
-# Build for distribution
-npm run build
+npm run dev      # ray develop
+npm test         # vitest
+npm run lint     # ray lint
+npm run build    # ray build
 ```
 
-### **Code Quality**
-```bash
-# Lint code
-npm run lint
-
-# Auto-fix issues
-npm run fix-lint
-
-# Type checking
-npm run build
-```
-
-### **Testing**
-```bash
-# Run in development mode
-npm run dev
-
-# Test all 4 commands in Raycast:
-# - Kube Contexts
-# - Current Context  
-# - Switch Context with Namespace
-# - Manage Contexts
-```
-
-## 📄 License
-
-MIT License - see LICENSE file for details.
-
-## 🤝 Contributing
-
-Contributions welcome! Please read the contributing guidelines and submit pull requests to the main repository.
-
----
-
-**Made with ❤️ for the Kubernetes community**
+Screenshots in `metadata/` predate the menu bar command and the Pinned/Recent layout and still need refreshing with Raycast's window capture (2000x1250 PNG).
