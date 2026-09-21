@@ -116,7 +116,7 @@ export default function ListContexts() {
               <Action.Push
                 title={`View ${context.name} Details`}
                 icon={Icon.Info}
-                target={<ContextDetails context={context} />}
+                target={<ContextDetails context={context} onSwitch={switchContext} />}
               />
             </ActionPanel>
           }

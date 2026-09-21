@@ -102,7 +102,7 @@ export default function SwitchContextWithNamespace() {
               <Action.Push
                 title={`View ${context.name} Details`}
                 icon={Icon.Info}
-                target={<ContextDetails context={context} />}
+                target={<ContextDetails context={context} onSwitch={(name) => switchContextWithNamespace(name)} />}
               />
             </ActionPanel>
           }

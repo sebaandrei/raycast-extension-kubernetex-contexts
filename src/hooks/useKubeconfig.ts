@@ -1,177 +1,62 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { useCachedPromise } from "@raycast/utils";
 import {
-  getAllContexts,
-  getCurrentContext,
-  switchToContext,
+  KubeconfigState,
+  loadKubeconfigState,
   setContextNamespace,
+  switchToContext,
   switchToContextWithNamespace,
-  getAllAvailableNamespaces,
-  getKubeconfigInfo,
 } from "../utils/kubeconfig-direct";
-import { KubernetesContext } from "../types";
 
-/**
- * Hook for kubeconfig availability and basic info
- */
-export function useKubeconfigInfo() {
-  const [info, setInfo] = useState({
-    path: "",
-    available: false,
-    contextCount: 0,
-    currentContext: null as string | null,
+// useCachedPromise needs a promise-returning function
+const loadState = async () => loadKubeconfigState();
+
+type StateUpdate = (state: KubeconfigState) => KubeconfigState;
+
+const withCurrentContext =
+  (contextName: string, namespace?: string): StateUpdate =>
+  (state) => ({
+    ...state,
+    currentContext: contextName,
+    contexts: state.contexts.map((ctx) => ({
+      ...ctx,
+      current: ctx.name === contextName,
+      ...(ctx.name === contextName && namespace ? { namespace } : {}),
+    })),
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const refresh = useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const kubeconfigInfo = getKubeconfigInfo();
-      setInfo(kubeconfigInfo);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return {
-    info,
-    isLoading,
-    error,
-    refresh,
-  };
-}
 
 /**
- * Hook for current context
+ * Loads the kubeconfig once (a single read + parse) and exposes the derived data
+ * together with the context operations. Operations throw typed errors on failure.
  */
-export function useCurrentKubeContext() {
-  const [currentContext, setCurrentContext] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+export function useKubeconfig() {
+  const { data, isLoading, error, revalidate, mutate } = useCachedPromise(loadState, [], {
+    keepPreviousData: true,
+    // Callers render the error themselves; avoid a duplicate default toast
+    onError: () => undefined,
+  });
 
-  const refresh = useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const current = getCurrentContext();
-      setCurrentContext(current);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return {
-    currentContext,
-    isLoading,
-    error,
-    refresh,
-  };
-}
-
-/**
- * Hook for all contexts
- */
-export function useKubeContexts() {
-  const [contexts, setContexts] = useState<KubernetesContext[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const refresh = useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const allContexts = getAllContexts();
-      setContexts(allContexts);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return {
-    contexts,
-    isLoading,
-    error,
-    refresh,
-  };
-}
-
-/**
- * Hook for available namespaces
- */
-export function useNamespaces() {
-  const [namespaces, setNamespaces] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const refresh = useCallback(() => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const availableNamespaces = getAllAvailableNamespaces();
-      setNamespaces(availableNamespaces);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return {
-    namespaces,
-    isLoading,
-    error,
-    refresh,
-  };
-}
-
-/**
- * Hook for context switching operations.
- * Failures are thrown so callers can show the specific error.
- */
-export function useContextSwitcher() {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const run = useCallback(async (operation: () => void) => {
-    setIsLoading(true);
-    try {
-      operation();
+  const run = useCallback(
+    async (operation: () => void, optimisticUpdate?: StateUpdate) => {
+      await mutate(
+        Promise.resolve().then(operation),
+        optimisticUpdate
+          ? { optimisticUpdate: (current) => (current ? optimisticUpdate(current) : current) }
+          : undefined
+      );
       return true;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [mutate]
+  );
 
-  const switchContext = useCallback((contextName: string) => run(() => switchToContext(contextName)), [run]);
+  const switchContext = useCallback(
+    (contextName: string) => run(() => switchToContext(contextName), withCurrentContext(contextName)),
+    [run]
+  );
 
   const switchContextWithNamespace = useCallback(
-    (contextName: string, namespace?: string) => run(() => switchToContextWithNamespace(contextName, namespace)),
+    (contextName: string, namespace?: string) =>
+      run(() => switchToContextWithNamespace(contextName, namespace), withCurrentContext(contextName, namespace)),
     [run]
   );
 
@@ -180,83 +65,29 @@ export function useContextSwitcher() {
     [run]
   );
 
+  const kubeconfigInfo = useMemo(
+    () => ({
+      path: data?.path ?? "",
+      available: !!data,
+      contextCount: data?.contexts.length ?? 0,
+      currentContext: data?.currentContext ?? null,
+    }),
+    [data]
+  );
+
   return {
+    kubeconfigInfo,
+    isKubeconfigAvailable: kubeconfigInfo.available,
+    currentContext: data?.currentContext ?? null,
+    contexts: useMemo(() => data?.contexts ?? [], [data]),
+    namespaces: useMemo(() => data?.namespaces ?? [], [data]),
+    clusters: useMemo(() => data?.clusters ?? [], [data]),
+    users: useMemo(() => data?.users ?? [], [data]),
+    isLoading,
+    error,
     switchContext,
     switchContextWithNamespace,
     setNamespace,
-    isLoading,
-  };
-}
-
-/**
- * Combined hook for complete kubeconfig management
- */
-export function useKubeconfig() {
-  const info = useKubeconfigInfo();
-  const currentContext = useCurrentKubeContext();
-  const contexts = useKubeContexts();
-  const namespaces = useNamespaces();
-  const switcher = useContextSwitcher();
-
-  const refresh = useCallback(() => {
-    info.refresh();
-    currentContext.refresh();
-    contexts.refresh();
-    namespaces.refresh();
-  }, [info, currentContext, contexts, namespaces]);
-
-  const switchContext = useCallback(
-    async (contextName: string) => {
-      const success = await switcher.switchContext(contextName);
-      if (success) {
-        // Refresh current context after successful switch
-        currentContext.refresh();
-        contexts.refresh();
-      }
-      return success;
-    },
-    [switcher, currentContext, contexts]
-  );
-
-  const switchContextWithNamespace = useCallback(
-    async (contextName: string, namespace?: string) => {
-      const success = await switcher.switchContextWithNamespace(contextName, namespace);
-      if (success) {
-        // Refresh all data after successful switch
-        currentContext.refresh();
-        contexts.refresh();
-        namespaces.refresh();
-      }
-      return success;
-    },
-    [switcher, currentContext, contexts, namespaces]
-  );
-
-  return {
-    // Info
-    kubeconfigInfo: info.info,
-    isKubeconfigAvailable: info.info.available,
-
-    // Current context
-    currentContext: currentContext.currentContext,
-
-    // All contexts
-    contexts: contexts.contexts,
-
-    // Available namespaces
-    namespaces: namespaces.namespaces,
-
-    // Loading states
-    isLoading:
-      info.isLoading || currentContext.isLoading || contexts.isLoading || namespaces.isLoading || switcher.isLoading,
-
-    // Errors
-    error: info.error || currentContext.error || contexts.error || namespaces.error,
-
-    // Operations
-    switchContext,
-    switchContextWithNamespace,
-    setNamespace: switcher.setNamespace,
-    refresh,
+    refresh: revalidate,
   };
 }

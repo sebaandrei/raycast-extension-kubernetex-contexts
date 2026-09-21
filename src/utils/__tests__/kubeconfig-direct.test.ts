@@ -9,16 +9,21 @@ vi.mock("../preferences", () => ({ getPreferences: () => ({ kubeconfigPath: pref
 import {
   createContext,
   deleteContext,
+  getAllAvailableNamespaces,
+  getAllClusters,
   getAllContexts,
+  getAllUsers,
   getClusterDetails,
   getCurrentContext,
   getUserAuthMethod,
+  loadKubeconfigState,
   modifyContext,
   readKubeconfig,
   setContextNamespace,
   switchToContext,
   switchToContextWithNamespace,
 } from "../kubeconfig-direct";
+import * as kubeconfigIo from "../kubeconfig-io";
 import { KubeconfigError, ValidationError } from "../kubeconfig-errors";
 
 const SAMPLE = `# my clusters
@@ -332,5 +337,40 @@ describe("read helpers", () => {
   it("writes only to the temp file and leaves nothing behind", () => {
     switchToContext("prod");
     expect(readdirSync(dir)).toEqual(["config"]);
+  });
+});
+
+describe("loadKubeconfigState", () => {
+  it("returns contexts, current context, namespaces, clusters and users", () => {
+    const state = loadKubeconfigState();
+
+    expect(state.path).toBe(path);
+    expect(state.currentContext).toBe("dev");
+    expect(state.contexts).toEqual(getAllContexts());
+    expect(state.namespaces).toEqual(getAllAvailableNamespaces());
+    expect(state.clusters).toEqual(getAllClusters());
+    expect(state.users).toEqual(getAllUsers());
+    expect(state.namespaces).toContain("apps");
+    expect(state.contexts.find((ctx) => ctx.name === "dev")?.current).toBe(true);
+  });
+
+  it("is plain serialisable data", () => {
+    const state = loadKubeconfigState();
+    expect(JSON.parse(JSON.stringify(state))).toEqual(state);
+  });
+
+  it("reads the kubeconfig file exactly once", () => {
+    const spy = vi.spyOn(kubeconfigIo, "readKubeconfigFile");
+    try {
+      loadKubeconfigState();
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("throws the typed error when the file is missing", () => {
+    prefs.kubeconfigPath = join(dir, "missing");
+    expectError(() => loadKubeconfigState(), KubeconfigError, /./);
   });
 });

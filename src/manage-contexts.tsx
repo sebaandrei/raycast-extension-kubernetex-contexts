@@ -1,13 +1,13 @@
 import { List, ActionPanel, Action, Icon, Form, useNavigation, Keyboard } from "@raycast/api";
 import { useState, useMemo } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
-import { createContext, deleteContext, modifyContext, getAllClusters, getAllUsers } from "./utils/kubeconfig-direct";
+import { createContext, deleteContext, modifyContext } from "./utils/kubeconfig-direct";
 import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { ContextDetails } from "./components/ContextDetails";
 
 export default function ManageContexts() {
-  const { contexts, isLoading, error, refresh } = useKubeconfig();
+  const { contexts, clusters, users, isLoading, error, refresh, switchContext } = useKubeconfig();
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredContexts = useMemo(() => {
@@ -53,7 +53,11 @@ export default function ManageContexts() {
       searchBarPlaceholder="Search contexts to manage..."
       actions={
         <ActionPanel>
-          <Action.Push title="Create New Context" icon={Icon.Plus} target={<CreateContextForm onCreated={refresh} />} />
+          <Action.Push
+            title="Create New Context"
+            icon={Icon.Plus}
+            target={<CreateContextForm clusters={clusters} users={users} onCreated={refresh} />}
+          />
           <Action
             title="Refresh"
             icon={Icon.ArrowClockwise}
@@ -94,13 +98,13 @@ export default function ManageContexts() {
               <Action.Push
                 title="Create New Context"
                 icon={Icon.Plus}
-                target={<CreateContextForm onCreated={refresh} />}
+                target={<CreateContextForm clusters={clusters} users={users} onCreated={refresh} />}
               />
               <Action.Push
                 title={`Modify ${context.name}`}
                 icon={Icon.Pencil}
                 shortcut={Keyboard.Shortcut.Common.Edit}
-                target={<ModifyContextForm context={context} onModified={refresh} />}
+                target={<ModifyContextForm context={context} clusters={clusters} users={users} onModified={refresh} />}
               />
               {!context.current && (
                 <>
@@ -123,7 +127,7 @@ export default function ManageContexts() {
               <Action.Push
                 title={`View ${context.name} Details`}
                 icon={Icon.Info}
-                target={<ContextDetails context={context} />}
+                target={<ContextDetails context={context} onSwitch={switchContext} />}
               />
               <Action
                 title="Refresh"
@@ -146,7 +150,7 @@ export default function ManageContexts() {
               <Action.Push
                 title="Create New Context"
                 icon={Icon.Plus}
-                target={<CreateContextForm onCreated={refresh} />}
+                target={<CreateContextForm clusters={clusters} users={users} onCreated={refresh} />}
               />
             </ActionPanel>
           }
@@ -156,7 +160,25 @@ export default function ManageContexts() {
   );
 }
 
-function CreateContextForm({ onCreated }: { onCreated: () => void }) {
+interface ClusterOption {
+  name: string;
+  server?: string;
+}
+
+interface UserOption {
+  name: string;
+  authMethod?: string;
+}
+
+function CreateContextForm({
+  clusters,
+  users,
+  onCreated,
+}: {
+  clusters: ClusterOption[];
+  users: UserOption[];
+  onCreated: () => void;
+}) {
   const { pop } = useNavigation();
   const [nameError, setNameError] = useState<string | undefined>();
   const [clusterError, setClusterError] = useState<string | undefined>();
@@ -164,9 +186,6 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
   const [serverError, setServerError] = useState<string | undefined>();
   const [useExistingCluster, setUseExistingCluster] = useState(true);
   const [useExistingUser, setUseExistingUser] = useState(true);
-
-  const clusters = getAllClusters();
-  const users = getAllUsers();
 
   async function handleSubmit(values: {
     name: string;
@@ -315,11 +334,19 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function ModifyContextForm({ context, onModified }: { context: KubernetesContext; onModified: () => void }) {
+function ModifyContextForm({
+  context,
+  clusters,
+  users,
+  onModified,
+}: {
+  context: KubernetesContext;
+  clusters: ClusterOption[];
+  users: UserOption[];
+  onModified: () => void;
+}) {
   const { pop } = useNavigation();
   const [nameError, setNameError] = useState<string | undefined>();
-  const clusters = getAllClusters();
-  const users = getAllUsers();
 
   async function handleSubmit(values: { name: string; cluster?: string; user?: string; namespace?: string }) {
     // Validation

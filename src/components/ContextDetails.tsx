@@ -1,19 +1,18 @@
 import { Detail, ActionPanel, Action, Icon, useNavigation, popToRoot } from "@raycast/api";
 import { KubernetesContext } from "../types";
-import { useKubeconfig } from "../hooks/useKubeconfig";
 import { showSuccessToast, showErrorToast } from "../utils/errors";
 
 interface ContextDetailsProps {
   context: KubernetesContext;
+  onSwitch: (contextName: string) => Promise<boolean>;
 }
 
-export function ContextDetails({ context }: ContextDetailsProps) {
+export function ContextDetails({ context, onSwitch }: ContextDetailsProps) {
   const { pop } = useNavigation();
-  const { switchContext } = useKubeconfig();
 
   const handleSwitchContext = async (contextName: string) => {
     try {
-      const success = await switchContext(contextName);
+      const success = await onSwitch(contextName);
       if (success) {
         await showSuccessToast("Context Switched", `Switched to: ${contextName}`);
         // Go back to Raycast main command list

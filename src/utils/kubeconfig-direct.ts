@@ -103,8 +103,7 @@ export function getUserAuthMethod(userName: string, config?: KubeConfig) {
 /**
  * Get all contexts from kubeconfig
  */
-export function getAllContexts(): KubernetesContext[] {
-  const config = readKubeconfig();
+export function getAllContexts(config: KubeConfig = readKubeconfig()): KubernetesContext[] {
   const currentContext = config["current-context"];
 
   if (!config.contexts) {
@@ -173,8 +172,7 @@ export function getCommonNamespaces(): string[] {
 /**
  * Get all unique namespaces from existing contexts
  */
-export function getNamespacesFromContexts(): string[] {
-  const config = readKubeconfig();
+export function getNamespacesFromContexts(config: KubeConfig = readKubeconfig()): string[] {
   const namespaces = new Set<string>();
 
   if (config.contexts) {
@@ -194,9 +192,9 @@ export function getNamespacesFromContexts(): string[] {
 /**
  * Get all available namespaces (common + from contexts)
  */
-export function getAllAvailableNamespaces(): string[] {
+export function getAllAvailableNamespaces(config: KubeConfig = readKubeconfig()): string[] {
   const common = getCommonNamespaces();
-  const fromContexts = getNamespacesFromContexts();
+  const fromContexts = getNamespacesFromContexts(config);
 
   // Combine and deduplicate
   const all = new Set([...common, ...fromContexts]);
@@ -430,9 +428,7 @@ export function modifyContext(
 /**
  * Get all available clusters from kubeconfig
  */
-export function getAllClusters(): Array<{ name: string; server?: string }> {
-  const config = readKubeconfig();
-
+export function getAllClusters(config: KubeConfig = readKubeconfig()): Array<{ name: string; server?: string }> {
   if (!config.clusters) {
     return [];
   }
@@ -446,9 +442,7 @@ export function getAllClusters(): Array<{ name: string; server?: string }> {
 /**
  * Get all available users from kubeconfig
  */
-export function getAllUsers(): Array<{ name: string; authMethod?: string }> {
-  const config = readKubeconfig();
-
+export function getAllUsers(config: KubeConfig = readKubeconfig()): Array<{ name: string; authMethod?: string }> {
   if (!config.users) {
     return [];
   }
@@ -457,4 +451,31 @@ export function getAllUsers(): Array<{ name: string; authMethod?: string }> {
     name: user.name,
     authMethod: getUserAuthMethod(user.name, config),
   }));
+}
+
+export interface KubeconfigState {
+  path: string;
+  contexts: KubernetesContext[];
+  currentContext: string | null;
+  namespaces: string[];
+  clusters: Array<{ name: string; server?: string }>;
+  users: Array<{ name: string; authMethod?: string }>;
+}
+
+/**
+ * Read the kubeconfig once and derive everything the commands need from it.
+ * The result is plain data so it can be cached. Throws the typed error if the file is unreadable.
+ */
+export function loadKubeconfigState(): KubeconfigState {
+  const path = getKubeconfigPath();
+  const config = readKubeconfig(path);
+
+  return {
+    path,
+    contexts: getAllContexts(config),
+    currentContext: config["current-context"] || null,
+    namespaces: getAllAvailableNamespaces(config),
+    clusters: getAllClusters(config),
+    users: getAllUsers(config),
+  };
 }
