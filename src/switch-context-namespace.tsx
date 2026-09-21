@@ -24,6 +24,7 @@ export default function SwitchContextWithNamespace() {
 
     push(
       <NamespaceSelector
+        contextName={contextName}
         namespaces={namespaces}
         currentNamespace={context?.namespace}
         onSelect={(namespace) => handleNamespaceSelect(contextName, namespace)}

@@ -3,6 +3,7 @@ import { KubernetesContext, ClusterDetails } from "../types";
 import { KubeconfigError, ValidationError } from "./kubeconfig-errors";
 import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "./kubeconfig-io";
 import { resolveKubeconfigPath } from "./kubeconfig-path";
+import { validateNamespace } from "./namespace";
 import { getPreferences } from "./preferences";
 
 /**
@@ -152,10 +153,21 @@ export function switchToContext(contextName: string): void {
   });
 }
 
+function assertValidNamespace(namespace: string): void {
+  const problem = validateNamespace(namespace);
+  if (problem) {
+    throw new ValidationError(
+      `Invalid namespace "${namespace}": ${problem}`,
+      "Enter a valid Kubernetes namespace name"
+    );
+  }
+}
+
 /**
  * Set namespace for a context
  */
 export function setContextNamespace(contextName: string, namespace: string): void {
+  assertValidNamespace(namespace);
   updateConfig((config) => {
     requireContext(config, contextName).context.namespace = namespace;
   });
@@ -205,6 +217,7 @@ export function getAllAvailableNamespaces(config: KubeConfig = readKubeconfig())
  * Switch context and optionally set namespace
  */
 export function switchToContextWithNamespace(contextName: string, namespace?: string): void {
+  if (namespace) assertValidNamespace(namespace);
   updateConfig((config) => {
     const context = requireContext(config, contextName);
     if (namespace) {
@@ -295,6 +308,7 @@ export function createContext(
   if (!name.trim() || !clusterName.trim() || !userName.trim()) {
     throw new ValidationError("Context, cluster and user names are required", "Fill in all required fields");
   }
+  if (namespace) assertValidNamespace(namespace);
 
   updateConfig((config) => {
     if (config.contexts?.some((ctx) => ctx.name === name)) {
@@ -384,6 +398,8 @@ export function modifyContext(
     namespace?: string;
   }
 ): void {
+  if (updates.namespace) assertValidNamespace(updates.namespace);
+
   updateConfig((config) => {
     const context = requireContext(config, contextName);
 

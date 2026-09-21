@@ -374,3 +374,36 @@ describe("loadKubeconfigState", () => {
     expectError(() => loadKubeconfigState(), KubeconfigError, /./);
   });
 });
+
+describe("namespace validation", () => {
+  const bad = "Bad_NS";
+  const unchanged = () => readFileSync(path, "utf8");
+
+  it("setContextNamespace rejects invalid names and leaves the file untouched", () => {
+    const before = unchanged();
+    expectError(() => setContextNamespace("dev", bad), ValidationError, /Invalid namespace/);
+    expect(unchanged()).toBe(before);
+  });
+
+  it("switchToContextWithNamespace rejects invalid names but allows none", () => {
+    const before = unchanged();
+    expectError(() => switchToContextWithNamespace("prod", bad), ValidationError, /Invalid namespace/);
+    expect(unchanged()).toBe(before);
+    switchToContextWithNamespace("prod");
+    expect(getCurrentContext()).toBe("prod");
+  });
+
+  it("createContext rejects an invalid namespace", () => {
+    const before = unchanged();
+    expectError(() => createContext("new", "dev-cluster", "dev-user", bad), ValidationError, /Invalid namespace/);
+    expect(unchanged()).toBe(before);
+  });
+
+  it("modifyContext rejects invalid namespaces but empty still removes", () => {
+    expectError(() => modifyContext("dev", { namespace: bad }), ValidationError, /Invalid namespace/);
+    modifyContext("dev", { namespace: "" });
+    expect(getAllContexts().find((c) => c.name === "dev")?.namespace).toBeUndefined();
+    modifyContext("dev", { namespace: "valid-ns" });
+    expect(getAllContexts().find((c) => c.name === "dev")?.namespace).toBe("valid-ns");
+  });
+});

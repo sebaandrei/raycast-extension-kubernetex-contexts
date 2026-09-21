@@ -5,6 +5,7 @@ import { createContext, deleteContext, modifyContext } from "./utils/kubeconfig-
 import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { switchAndClose } from "./utils/switch";
+import { validateNamespace } from "./utils/namespace";
 import { ContextDetails } from "./components/ContextDetails";
 import { KubeconfigEmptyView } from "./components/KubeconfigEmptyView";
 import {
@@ -185,6 +186,7 @@ function CreateContextForm({
   const [clusterError, setClusterError] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | undefined>();
   const [serverError, setServerError] = useState<string | undefined>();
+  const [namespaceError, setNamespaceError] = useState<string | undefined>();
   const [useExistingCluster, setUseExistingCluster] = useState(true);
   const [useExistingUser, setUseExistingUser] = useState(true);
 
@@ -218,6 +220,12 @@ function CreateContextForm({
 
     if (!useExistingCluster && !values.clusterServer?.trim()) {
       setServerError("Server URL is required for a new cluster");
+      return;
+    }
+
+    const namespaceProblem = values.namespace?.trim() ? validateNamespace(values.namespace.trim()) : undefined;
+    if (namespaceProblem) {
+      setNamespaceError(namespaceProblem);
       return;
     }
 
@@ -330,7 +338,13 @@ function CreateContextForm({
         />
       )}
 
-      <Form.TextField id="namespace" title="Namespace (Optional)" placeholder="default" />
+      <Form.TextField
+        id="namespace"
+        title="Namespace (Optional)"
+        placeholder="default"
+        error={namespaceError}
+        onChange={() => setNamespaceError(undefined)}
+      />
     </Form>
   );
 }
@@ -348,11 +362,18 @@ function ModifyContextForm({
 }) {
   const { pop } = useNavigation();
   const [nameError, setNameError] = useState<string | undefined>();
+  const [namespaceError, setNamespaceError] = useState<string | undefined>();
 
   async function handleSubmit(values: { name: string; cluster?: string; user?: string; namespace?: string }) {
     // Validation
     if (!values.name.trim()) {
       setNameError("Context name is required");
+      return;
+    }
+
+    const namespaceProblem = values.namespace?.trim() ? validateNamespace(values.namespace.trim()) : undefined;
+    if (namespaceProblem) {
+      setNamespaceError(namespaceProblem);
       return;
     }
 
@@ -437,7 +458,14 @@ function ModifyContextForm({
         ))}
       </Form.Dropdown>
 
-      <Form.TextField id="namespace" title="Namespace" defaultValue={context.namespace || ""} placeholder="default" />
+      <Form.TextField
+        id="namespace"
+        title="Namespace"
+        defaultValue={context.namespace || ""}
+        placeholder="default"
+        error={namespaceError}
+        onChange={() => setNamespaceError(undefined)}
+      />
     </Form>
   );
 }

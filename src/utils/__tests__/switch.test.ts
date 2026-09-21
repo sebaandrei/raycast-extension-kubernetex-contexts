@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   showErrorToast: vi.fn(),
   getPreferences: vi.fn(),
   confirmAlert: vi.fn(),
+  rememberNamespace: vi.fn(),
 }));
 
 vi.mock("@raycast/api", () => ({
@@ -21,6 +22,7 @@ vi.mock("@raycast/api", () => ({
   LocalStorage: { setItem: mocks.setItem, getItem: mocks.getItem },
 }));
 vi.mock("../errors", () => ({ showErrorToast: mocks.showErrorToast }));
+vi.mock("../recent-namespaces", () => ({ rememberNamespace: mocks.rememberNamespace }));
 vi.mock("../preferences", () => ({ getPreferences: mocks.getPreferences }));
 
 import { KubeconfigError } from "../kubeconfig-errors";
@@ -106,6 +108,31 @@ describe("switchAndClose", () => {
     expect(mocks.showHUD).toHaveBeenCalledWith("Switched to b");
   });
 
+  it("records the namespace only when one was given", async () => {
+    await switchAndClose(async () => true, { contextName: "b", namespace: "ns", fromContext: "a" });
+    expect(mocks.rememberNamespace).toHaveBeenCalledWith("b", "ns");
+
+    mocks.rememberNamespace.mockClear();
+    await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
+    expect(mocks.rememberNamespace).not.toHaveBeenCalled();
+  });
+
+  it("does not record the namespace when the switch fails", async () => {
+    await switchAndClose(async () => false, { contextName: "b", namespace: "ns", fromContext: "a" });
+    expect(mocks.rememberNamespace).not.toHaveBeenCalled();
+  });
+
+  it("does not fail the switch when recording the namespace throws", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.rememberNamespace.mockRejectedValue(new Error("storage down"));
+
+    const ok = await switchAndClose(async () => true, { contextName: "b", namespace: "ns", fromContext: "a" });
+
+    expect(ok).toBe(true);
+    expect(mocks.showErrorToast).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it("treats a false result as a failed switch", async () => {
     const ok = await switchAndClose(async () => false, { contextName: "b", fromContext: "a" });
 
@@ -158,6 +185,18 @@ describe("switchAndClose", () => {
       expect(mocks.showToast).not.toHaveBeenCalled();
       expect(mocks.showErrorToast).not.toHaveBeenCalled();
       expect(mocks.closeMainWindow).not.toHaveBeenCalled();
+    });
+
+    it("does not switch and shows an error when the confirmation itself fails", async () => {
+      mocks.confirmAlert.mockRejectedValue(new Error("alert failed"));
+      const perform = vi.fn().mockResolvedValue(true);
+
+      const ok = await switchAndClose(perform, { contextName: "prod-eu", fromContext: "dev" });
+
+      expect(ok).toBe(false);
+      expect(perform).not.toHaveBeenCalled();
+      expect(mocks.showErrorToast).toHaveBeenCalledOnce();
+      expect(mocks.showHUD).not.toHaveBeenCalled();
     });
 
     it("does not ask when the production context is already current", async () => {

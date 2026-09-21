@@ -3,6 +3,7 @@ import { getProductionMatcher } from "./environment";
 import { showErrorToast } from "./errors";
 import { getPreferences } from "./preferences";
 import { rememberPreviousContext } from "./previous-context";
+import { rememberNamespace } from "./recent-namespaces";
 
 export interface SwitchOptions {
   contextName: string;
@@ -20,13 +21,19 @@ export function formatSwitchMessage(contextName: string, namespace?: string): st
  * `perform` is the hook operation that actually switches. Never throws.
  */
 export async function switchAndClose(perform: () => Promise<unknown>, opts: SwitchOptions): Promise<boolean> {
-  if (opts.contextName !== opts.fromContext && getProductionMatcher().isProduction(opts.contextName)) {
-    const confirmed = await confirmAlert({
-      title: "Switch to production?",
-      message: `"${opts.contextName}" looks like a production context. Subsequent kubectl and other commands will target it.`,
-      primaryAction: { title: "Switch to Production", style: Alert.ActionStyle.Destructive },
-    });
-    if (!confirmed) return false;
+  try {
+    if (opts.contextName !== opts.fromContext && getProductionMatcher().isProduction(opts.contextName)) {
+      const confirmed = await confirmAlert({
+        title: "Switch to production?",
+        message: `"${opts.contextName}" looks like a production context. Subsequent kubectl and other commands will target it.`,
+        primaryAction: { title: "Switch to Production", style: Alert.ActionStyle.Destructive },
+      });
+      if (!confirmed) return false;
+    }
+  } catch (err) {
+    // Fail safe: without a confirmation the switch to production does not happen
+    await showErrorToast(err as Error);
+    return false;
   }
 
   try {
@@ -42,6 +49,7 @@ export async function switchAndClose(perform: () => Promise<unknown>, opts: Swit
   // The kubeconfig is already updated; feedback problems must not turn that into a failure
   try {
     await rememberPreviousContext(opts.fromContext, opts.contextName);
+    if (opts.namespace) await rememberNamespace(opts.contextName, opts.namespace);
 
     const message = formatSwitchMessage(opts.contextName, opts.namespace);
     if (getPreferences().closeAfterSwitch) {
