@@ -21,20 +21,28 @@ export function formatSwitchMessage(contextName: string, namespace?: string): st
 export async function switchAndClose(perform: () => Promise<unknown>, opts: SwitchOptions): Promise<boolean> {
   // Seam: a confirmation step (e.g. production guard) can be added here, before perform().
   try {
-    await perform();
+    const result = await perform();
+    if (result === false) {
+      throw new Error(`Could not switch to context "${opts.contextName}"`);
+    }
   } catch (err) {
     await showErrorToast(err as Error);
     return false;
   }
 
-  await rememberPreviousContext(opts.fromContext, opts.contextName);
+  // The kubeconfig is already updated; feedback problems must not turn that into a failure
+  try {
+    await rememberPreviousContext(opts.fromContext, opts.contextName);
 
-  const message = formatSwitchMessage(opts.contextName, opts.namespace);
-  if (getPreferences().closeAfterSwitch) {
-    await closeMainWindow({ clearRootSearch: true });
-    await showHUD(message);
-  } else {
-    await showToast({ style: Toast.Style.Success, title: "Context Switched", message });
+    const message = formatSwitchMessage(opts.contextName, opts.namespace);
+    if (getPreferences().closeAfterSwitch) {
+      await closeMainWindow({ clearRootSearch: true });
+      await showHUD(message);
+    } else {
+      await showToast({ style: Toast.Style.Success, title: "Context Switched", message });
+    }
+  } catch (err) {
+    console.error("Switched context but failed to show feedback:", err);
   }
   return true;
 }

@@ -101,4 +101,24 @@ describe("switchAndClose", () => {
     expect(ok).toBe(true);
     expect(mocks.showHUD).toHaveBeenCalledWith("Switched to b");
   });
+
+  it("treats a false result as a failed switch", async () => {
+    const ok = await switchAndClose(async () => false, { contextName: "b", fromContext: "a" });
+
+    expect(ok).toBe(false);
+    expect(mocks.showErrorToast).toHaveBeenCalledOnce();
+    expect(mocks.showHUD).not.toHaveBeenCalled();
+    expect(mocks.setItem).not.toHaveBeenCalled();
+  });
+
+  it("still reports success when closing or the HUD fails", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.closeMainWindow.mockRejectedValue(new Error("no window"));
+
+    const ok = await switchAndClose(async () => true, { contextName: "b", fromContext: "a" });
+
+    expect(ok).toBe(true);
+    expect(mocks.showErrorToast).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
 });
