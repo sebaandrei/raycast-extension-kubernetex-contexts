@@ -466,8 +466,7 @@ export interface KubeconfigState {
  * Read the kubeconfig once and derive everything the commands need from it.
  * The result is plain data so it can be cached. Throws the typed error if the file is unreadable.
  */
-export function loadKubeconfigState(): KubeconfigState {
-  const path = getKubeconfigPath();
+export function loadKubeconfigState(path: string = getKubeconfigPath()): KubeconfigState {
   const config = readKubeconfig(path);
 
   return {

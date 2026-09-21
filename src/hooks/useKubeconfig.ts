@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useCachedPromise } from "@raycast/utils";
 import {
+  getKubeconfigPath,
   KubeconfigState,
   loadKubeconfigState,
   setContextNamespace,
@@ -9,7 +10,7 @@ import {
 } from "../utils/kubeconfig-direct";
 
 // useCachedPromise needs a promise-returning function
-const loadState = async () => loadKubeconfigState();
+const loadState = async (path: string) => loadKubeconfigState(path);
 
 type StateUpdate = (state: KubeconfigState) => KubeconfigState;
 
@@ -27,11 +28,12 @@ const withCurrentContext =
 
 /**
  * Loads the kubeconfig once (a single read + parse) and exposes the derived data
- * together with the context operations. Operations throw typed errors on failure.
+ * together with the context operations. Operations throw typed errors on failure;
+ * `error` only reflects load failures, so callers show operation errors themselves.
  */
 export function useKubeconfig() {
-  const { data, isLoading, error, revalidate, mutate } = useCachedPromise(loadState, [], {
-    keepPreviousData: true,
+  // The path is part of the cache key so data from another kubeconfig is never shown
+  const { data, isLoading, error, revalidate, mutate } = useCachedPromise(loadState, [getKubeconfigPath()], {
     // Callers render the error themselves; avoid a duplicate default toast
     onError: () => undefined,
   });
