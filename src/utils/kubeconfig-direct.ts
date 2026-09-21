@@ -1,46 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
-import { parse, stringify } from "yaml";
+import { readFileSync } from "fs";
 import { KubernetesContext, ClusterDetails } from "../types";
-import { KubeconfigError, ValidationError } from "./errors";
+import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "./kubeconfig-io";
 import { resolveKubeconfigPath } from "./kubeconfig-path";
 import { getPreferences } from "./preferences";
-
-interface KubeConfig {
-  "current-context"?: string;
-  contexts?: Array<{
-    name: string;
-    context: {
-      cluster: string;
-      user: string;
-      namespace?: string;
-    };
-  }>;
-  clusters?: Array<{
-    name: string;
-    cluster: {
-      server?: string;
-      "certificate-authority"?: string;
-      "certificate-authority-data"?: string;
-      "insecure-skip-tls-verify"?: boolean;
-      [key: string]: unknown;
-    };
-  }>;
-  users?: Array<{
-    name: string;
-    user: {
-      "client-certificate"?: string;
-      "client-certificate-data"?: string;
-      "client-key"?: string;
-      "client-key-data"?: string;
-      token?: string;
-      username?: string;
-      password?: string;
-      "auth-provider"?: Record<string, unknown>;
-      exec?: Record<string, unknown>;
-      [key: string]: unknown;
-    };
-  }>;
-}
 
 /**
  * Get the kubeconfig file path from preferences, environment or default
@@ -50,110 +12,17 @@ export function getKubeconfigPath(): string {
 }
 
 /**
- * Read and parse the kubeconfig file with enhanced error handling
+ * Read and parse the kubeconfig file
  */
 export function readKubeconfig(kubeconfigPath: string = getKubeconfigPath()): KubeConfig {
-  try {
-    if (!existsSync(kubeconfigPath)) {
-      throw new KubeconfigError(
-        `Kubeconfig file not found at ${kubeconfigPath}`,
-        "Create a kubeconfig file, set the Kubeconfig Path in the extension preferences, or set the KUBECONFIG environment variable"
-      );
-    }
-
-    const content = readFileSync(kubeconfigPath, "utf8");
-
-    if (!content.trim()) {
-      throw new KubeconfigError("Kubeconfig file is empty", "Add cluster configuration to your kubeconfig file");
-    }
-
-    const config = parse(content);
-    if (!config || typeof config !== "object") {
-      throw new KubeconfigError("Invalid kubeconfig format", "Check your kubeconfig syntax and structure");
-    }
-
-    return config;
-  } catch (error) {
-    if (error instanceof KubeconfigError) {
-      throw error;
-    }
-
-    if (error instanceof Error) {
-      if (error.message.includes("permission denied") || error.message.includes("EACCES")) {
-        throw new KubeconfigError(
-          `Permission denied accessing ${kubeconfigPath}`,
-          `Fix file permissions: chmod 600 ${kubeconfigPath}`
-        );
-      }
-
-      if (error.message.includes("YAML")) {
-        throw new KubeconfigError(
-          "Invalid YAML syntax in kubeconfig",
-          "Check your kubeconfig syntax or regenerate the file"
-        );
-      }
-    }
-
-    console.error("Failed to read kubeconfig:", error);
-    throw new KubeconfigError("Failed to read kubeconfig file", "Check the file exists and is accessible");
-  }
+  return readKubeconfigFile(kubeconfigPath);
 }
 
 /**
- * Write kubeconfig back to file with enhanced error handling
+ * Write kubeconfig back to file, preserving comments and permissions
  */
 export function writeKubeconfig(config: KubeConfig, kubeconfigPath: string = getKubeconfigPath()): void {
-  try {
-    // Validate config structure
-    if (!config || typeof config !== "object") {
-      throw new ValidationError("Invalid kubeconfig data", "Ensure the configuration object is valid");
-    }
-
-    const content = stringify(config);
-
-    if (!content.trim()) {
-      throw new KubeconfigError("Empty kubeconfig content", "Configuration data appears to be empty");
-    }
-
-    // Create backup of existing file
-    const backupPath = `${kubeconfigPath}.backup`;
-    if (existsSync(kubeconfigPath)) {
-      const existingContent = readFileSync(kubeconfigPath, "utf8");
-      writeFileSync(backupPath, existingContent, "utf8");
-    }
-
-    writeFileSync(kubeconfigPath, content, "utf8");
-
-    // Cleanup backup on successful write
-    if (existsSync(backupPath)) {
-      try {
-        unlinkSync(backupPath);
-      } catch (cleanupError) {
-        // Ignore cleanup errors
-        console.warn("Failed to cleanup backup file:", cleanupError);
-      }
-    }
-  } catch (error) {
-    if (error instanceof ValidationError || error instanceof KubeconfigError) {
-      throw error;
-    }
-
-    if (error instanceof Error) {
-      if (error.message.includes("permission denied") || error.message.includes("EACCES")) {
-        throw new KubeconfigError(
-          `Permission denied writing ${kubeconfigPath}`,
-          `Fix file permissions: chmod 600 ${kubeconfigPath}`
-        );
-      }
-
-      if (error.message.includes("ENOSPC")) {
-        throw new KubeconfigError("No space left on device", "Free up disk space and try again");
-      }
-    }
-
-    console.error("Failed to write kubeconfig:", error);
-    throw new KubeconfigError("Failed to write kubeconfig file", "Check file permissions and disk space");
-  }
+  writeKubeconfigFile(config, kubeconfigPath);
 }
 
 /**
