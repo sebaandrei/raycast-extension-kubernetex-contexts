@@ -1,5 +1,6 @@
 import { Detail, ActionPanel, Action, Keyboard } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
+import { getKubeconfigPath } from "./utils/kubeconfig-direct";
 import { escapeMarkdown } from "./utils/markdown";
 import { switchAndClose } from "./utils/switch";
 
@@ -23,7 +24,7 @@ ${error.message.replace(/`/g, "'")}
 \`\`\`
 
 ## Troubleshooting
-- Check if ~/.kube/config exists
+- Check if ${escapeMarkdown(getKubeconfigPath())} exists
 - Verify file permissions
 - Ensure valid YAML format
       `;
