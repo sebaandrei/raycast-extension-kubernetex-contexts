@@ -1,6 +1,7 @@
 import { showToast, Toast } from "@raycast/api";
+import { KubeconfigError, ValidationError } from "./kubeconfig-errors";
 
-export { KubeconfigError, ValidationError } from "./kubeconfig-errors";
+export { KubeconfigError, ValidationError };
 
 /**
  * Enhanced error types for better user guidance
@@ -23,7 +24,7 @@ function analyzeError(error: Error): KubeError {
     return {
       type: "file",
       title: "Kubeconfig Not Found",
-      message: "No kubeconfig file found at ~/.kube/config",
+      message: "No kubeconfig file found",
       action: "Create a kubeconfig file or check your Kubernetes setup",
     };
   }
@@ -32,8 +33,8 @@ function analyzeError(error: Error): KubeError {
     return {
       type: "permission",
       title: "Permission Denied",
-      message: "Cannot access ~/.kube/config",
-      action: "Fix file permissions: chmod 600 ~/.kube/config",
+      message: "Cannot access the kubeconfig file",
+      action: "Check the file permissions of your kubeconfig",
     };
   }
 
@@ -109,7 +110,16 @@ function analyzeError(error: Error): KubeError {
  * Shows an enhanced error toast with actionable guidance
  */
 export async function showErrorToast(error: Error): Promise<void> {
-  const kubeError = analyzeError(error);
+  // Typed errors already carry a specific message and next step
+  const kubeError: KubeError =
+    error instanceof KubeconfigError || error instanceof ValidationError
+      ? {
+          type: error instanceof ValidationError ? "validation" : "kubeconfig",
+          title: error instanceof ValidationError ? "Validation Error" : "Kubeconfig Error",
+          message: error.message,
+          action: error.action,
+        }
+      : analyzeError(error);
 
   await showToast({
     style: Toast.Style.Failure,

@@ -152,74 +152,39 @@ export function useNamespaces() {
 }
 
 /**
- * Hook for context switching operations
+ * Hook for context switching operations.
+ * Failures are thrown so callers can show the specific error.
  */
 export function useContextSwitcher() {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
 
-  const switchContext = useCallback(async (contextName: string) => {
+  const run = useCallback(async (operation: () => void) => {
     setIsLoading(true);
-    setError(null);
-
     try {
-      const success = switchToContext(contextName);
-      if (!success) {
-        throw new Error(`Failed to switch to context: ${contextName}`);
-      }
+      operation();
       return true;
-    } catch (err) {
-      setError(err as Error);
-      return false;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const switchContextWithNamespace = useCallback(async (contextName: string, namespace?: string) => {
-    setIsLoading(true);
-    setError(null);
+  const switchContext = useCallback((contextName: string) => run(() => switchToContext(contextName)), [run]);
 
-    try {
-      const success = switchToContextWithNamespace(contextName, namespace);
-      if (!success) {
-        throw new Error(
-          `Failed to switch to context: ${contextName}${namespace ? ` with namespace: ${namespace}` : ""}`
-        );
-      }
-      return true;
-    } catch (err) {
-      setError(err as Error);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const switchContextWithNamespace = useCallback(
+    (contextName: string, namespace?: string) => run(() => switchToContextWithNamespace(contextName, namespace)),
+    [run]
+  );
 
-  const setNamespace = useCallback(async (contextName: string, namespace: string) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const success = setContextNamespace(contextName, namespace);
-      if (!success) {
-        throw new Error(`Failed to set namespace for context: ${contextName}`);
-      }
-      return true;
-    } catch (err) {
-      setError(err as Error);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const setNamespace = useCallback(
+    (contextName: string, namespace: string) => run(() => setContextNamespace(contextName, namespace)),
+    [run]
+  );
 
   return {
     switchContext,
     switchContextWithNamespace,
     setNamespace,
     isLoading,
-    error,
   };
 }
 
@@ -286,7 +251,7 @@ export function useKubeconfig() {
       info.isLoading || currentContext.isLoading || contexts.isLoading || namespaces.isLoading || switcher.isLoading,
 
     // Errors
-    error: info.error || currentContext.error || contexts.error || namespaces.error || switcher.error,
+    error: info.error || currentContext.error || contexts.error || namespaces.error,
 
     // Operations
     switchContext,

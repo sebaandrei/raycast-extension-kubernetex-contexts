@@ -22,6 +22,22 @@ export default function ManageContexts() {
     );
   }, [contexts, searchQuery]);
 
+  async function handleDelete(contextName: string, removeUnused: boolean) {
+    try {
+      const { removedCluster, removedUser } = deleteContext(contextName, { removeUnused });
+      const removed = [removedCluster && `cluster ${removedCluster}`, removedUser && `user ${removedUser}`].filter(
+        Boolean
+      );
+      await showSuccessToast(
+        "Context Deleted",
+        `Deleted ${contextName}${removed.length > 0 ? ` and unused ${removed.join(", ")}` : ""}`
+      );
+      refresh();
+    } catch (err) {
+      await showErrorToast(err as Error);
+    }
+  }
+
   if (error) {
     return (
       <List>
@@ -87,21 +103,22 @@ export default function ManageContexts() {
                 target={<ModifyContextForm context={context} onModified={refresh} />}
               />
               {!context.current && (
-                <Action
-                  title={`Delete ${context.name}`}
-                  icon={Icon.Trash}
-                  style={Action.Style.Destructive}
-                  shortcut={Keyboard.Shortcut.Common.Remove}
-                  onAction={async () => {
-                    try {
-                      await deleteContext(context.name);
-                      await showSuccessToast("Context Deleted", `Successfully deleted context: ${context.name}`);
-                      refresh();
-                    } catch (err) {
-                      await showErrorToast(err as Error);
-                    }
-                  }}
-                />
+                <>
+                  <Action
+                    title={`Delete ${context.name}`}
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    shortcut={Keyboard.Shortcut.Common.Remove}
+                    onAction={() => handleDelete(context.name, false)}
+                  />
+                  <Action
+                    title={`Delete ${context.name} and Unused Cluster/User`}
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    shortcut={Keyboard.Shortcut.Common.RemoveAll}
+                    onAction={() => handleDelete(context.name, true)}
+                  />
+                </>
               )}
               <Action.Push
                 title={`View ${context.name} Details`}
@@ -144,6 +161,7 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
   const [nameError, setNameError] = useState<string | undefined>();
   const [clusterError, setClusterError] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | undefined>();
+  const [serverError, setServerError] = useState<string | undefined>();
   const [useExistingCluster, setUseExistingCluster] = useState(true);
   const [useExistingUser, setUseExistingUser] = useState(true);
 
@@ -155,6 +173,7 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
     cluster?: string;
     clusterName?: string;
     clusterServer?: string;
+    insecureSkipTlsVerify?: boolean;
     user?: string;
     userName?: string;
     namespace?: string;
@@ -177,13 +196,19 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
       return;
     }
 
+    if (!useExistingCluster && !values.clusterServer?.trim()) {
+      setServerError("Server URL is required for a new cluster");
+      return;
+    }
+
     try {
-      await createContext(
+      createContext(
         values.name.trim(),
         clusterName,
         userName,
         values.namespace?.trim() || undefined,
-        useExistingCluster ? undefined : values.clusterServer?.trim()
+        useExistingCluster ? undefined : values.clusterServer?.trim(),
+        { insecureSkipTlsVerify: !useExistingCluster && values.insecureSkipTlsVerify === true }
       );
 
       await showSuccessToast("Context Created", `Successfully created context: ${values.name}`);
@@ -241,8 +266,17 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
           />
           <Form.TextField
             id="clusterServer"
-            title="Cluster Server URL (Optional)"
+            title="Cluster Server URL"
             placeholder="https://my-cluster.example.com:6443"
+            error={serverError}
+            onChange={() => setServerError(undefined)}
+          />
+          <Form.Checkbox
+            id="insecureSkipTlsVerify"
+            title="TLS"
+            label="Skip TLS verification (insecure)"
+            info="Only enable for clusters with self-signed certificates you trust. Traffic is not verified."
+            defaultValue={false}
           />
         </>
       )}
@@ -284,20 +318,10 @@ function CreateContextForm({ onCreated }: { onCreated: () => void }) {
 function ModifyContextForm({ context, onModified }: { context: KubernetesContext; onModified: () => void }) {
   const { pop } = useNavigation();
   const [nameError, setNameError] = useState<string | undefined>();
-  const [useExistingCluster, setUseExistingCluster] = useState(true);
-  const [useExistingUser, setUseExistingUser] = useState(true);
-
   const clusters = getAllClusters();
   const users = getAllUsers();
 
-  async function handleSubmit(values: {
-    name: string;
-    cluster?: string;
-    clusterName?: string;
-    user?: string;
-    userName?: string;
-    namespace?: string;
-  }) {
+  async function handleSubmit(values: { name: string; cluster?: string; user?: string; namespace?: string }) {
     // Validation
     if (!values.name.trim()) {
       setNameError("Context name is required");
@@ -316,12 +340,12 @@ function ModifyContextForm({ context, onModified }: { context: KubernetesContext
         updates.newName = values.name.trim();
       }
 
-      const newCluster = useExistingCluster ? values.cluster?.trim() : values.clusterName?.trim();
+      const newCluster = values.cluster?.trim();
       if (newCluster && newCluster !== context.cluster) {
         updates.cluster = newCluster;
       }
 
-      const newUser = useExistingUser ? values.user?.trim() : values.userName?.trim();
+      const newUser = values.user?.trim();
       if (newUser && newUser !== context.user) {
         updates.user = newUser;
       }
@@ -338,7 +362,7 @@ function ModifyContextForm({ context, onModified }: { context: KubernetesContext
         return;
       }
 
-      await modifyContext(context.name, updates);
+      modifyContext(context.name, updates);
 
       await showSuccessToast("Context Modified", `Successfully updated context: ${values.name}`);
       onModified();
@@ -365,49 +389,25 @@ function ModifyContextForm({ context, onModified }: { context: KubernetesContext
         onChange={() => setNameError(undefined)}
       />
 
-      <Form.Checkbox
-        id="useExistingCluster"
-        title="Cluster Selection"
-        label="Use existing cluster"
-        value={useExistingCluster}
-        onChange={setUseExistingCluster}
-      />
+      <Form.Dropdown id="cluster" title="Cluster" defaultValue={context.cluster}>
+        {clusters.map((cluster) => (
+          <Form.Dropdown.Item
+            key={cluster.name}
+            value={cluster.name}
+            title={`${cluster.name}${cluster.server ? ` (${cluster.server})` : ""}`}
+          />
+        ))}
+      </Form.Dropdown>
 
-      {useExistingCluster ? (
-        <Form.Dropdown id="cluster" title="Cluster" defaultValue={context.cluster}>
-          {clusters.map((cluster) => (
-            <Form.Dropdown.Item
-              key={cluster.name}
-              value={cluster.name}
-              title={`${cluster.name}${cluster.server ? ` (${cluster.server})` : ""}`}
-            />
-          ))}
-        </Form.Dropdown>
-      ) : (
-        <Form.TextField id="clusterName" title="Cluster Name" defaultValue={context.cluster} placeholder="my-cluster" />
-      )}
-
-      <Form.Checkbox
-        id="useExistingUser"
-        title="User Selection"
-        label="Use existing user"
-        value={useExistingUser}
-        onChange={setUseExistingUser}
-      />
-
-      {useExistingUser ? (
-        <Form.Dropdown id="user" title="User" defaultValue={context.user}>
-          {users.map((user) => (
-            <Form.Dropdown.Item
-              key={user.name}
-              value={user.name}
-              title={`${user.name}${user.authMethod ? ` (${user.authMethod})` : ""}`}
-            />
-          ))}
-        </Form.Dropdown>
-      ) : (
-        <Form.TextField id="userName" title="User Name" defaultValue={context.user} placeholder="my-user" />
-      )}
+      <Form.Dropdown id="user" title="User" defaultValue={context.user}>
+        {users.map((user) => (
+          <Form.Dropdown.Item
+            key={user.name}
+            value={user.name}
+            title={`${user.name}${user.authMethod ? ` (${user.authMethod})` : ""}`}
+          />
+        ))}
+      </Form.Dropdown>
 
       <Form.TextField id="namespace" title="Namespace" defaultValue={context.namespace || ""} placeholder="default" />
     </Form>
