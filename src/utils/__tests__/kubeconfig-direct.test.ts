@@ -314,6 +314,21 @@ describe("read helpers", () => {
     });
   });
 
+  it("isSecure requires HTTPS and verified TLS", () => {
+    const config = {
+      clusters: [
+        { name: "https", cluster: { server: "https://a.example" } },
+        { name: "https-skip", cluster: { server: "https://a.example", "insecure-skip-tls-verify": true } },
+        { name: "http", cluster: { server: "http://a.example" } },
+        { name: "none", cluster: {} },
+      ],
+    } as unknown as ReturnType<typeof cfg>;
+    expect(getClusterDetails("https", config)?.isSecure).toBe(true);
+    expect(getClusterDetails("https-skip", config)?.isSecure).toBe(false);
+    expect(getClusterDetails("http", config)?.isSecure).toBe(false);
+    expect(getClusterDetails("none", config)).toMatchObject({ isSecure: false, protocol: "Unknown" });
+  });
+
   it("getClusterDetails returns null for an unknown cluster", () => {
     expect(getClusterDetails("ghost", cfg())).toBeNull();
   });
@@ -362,8 +377,9 @@ describe("read helpers", () => {
     expect(contexts[0].userAuthMethod).toBe("Token");
   });
 
-  it("writes only to the temp file and leaves nothing behind", () => {
+  it("switching changes only current-context and leaves nothing behind", () => {
     switchToContext("prod");
+    expect(file()).toBe(SAMPLE.replace("current-context: dev", "current-context: prod"));
     expect(readdirSync(dir)).toEqual(["config"]);
   });
 });
@@ -384,7 +400,8 @@ describe("loadKubeconfigState", () => {
 
   it("is plain serialisable data", () => {
     const state = loadKubeconfigState();
-    expect(JSON.parse(JSON.stringify(state))).toEqual(state);
+    // structuredClone throws on functions/class instances and keeps undefined fields
+    expect(structuredClone(state)).toStrictEqual(state);
   });
 
   it("reads the kubeconfig file exactly once", () => {
@@ -433,5 +450,75 @@ describe("namespace validation", () => {
     expect(getAllContexts().find((c) => c.name === "dev")?.namespace).toBeUndefined();
     modifyContext("dev", { namespace: "valid-ns" });
     expect(getAllContexts().find((c) => c.name === "dev")?.namespace).toBe("valid-ns");
+  });
+});
+
+describe("malformed kubeconfig entries", () => {
+  const MALFORMED = `current-context: bare
+contexts:
+  - name: bare
+  - name: ok
+    context: {cluster: c-ok, user: u-ok, namespace: apps}
+clusters:
+  - name: c-bare
+  - name: c-ok
+    cluster: {server: "https://ok.example"}
+users:
+  - name: u-bare
+  - name: u-ok
+    user: {token: t}
+`;
+
+  beforeEach(() => writeFileSync(path, MALFORMED));
+
+  it("lists a context without a context body with empty cluster and user", () => {
+    const contexts = getAllContexts();
+    expect(contexts.map((c) => [c.name, c.cluster, c.user, c.current])).toEqual([
+      ["bare", "", "", true],
+      ["ok", "c-ok", "u-ok", false],
+    ]);
+    expect(contexts[0].clusterDetails).toBeUndefined();
+    expect(contexts[0].userAuthMethod).toBe("Unknown");
+  });
+
+  it("read helpers tolerate missing nested maps", () => {
+    expect(getClusterDetails("c-bare", cfg())).toMatchObject({ server: "", isSecure: false, hasCA: false });
+    expect(getUserAuthMethod("u-bare", cfg())).toBe("Unknown");
+    expect(getAllClusters(cfg())).toEqual([
+      { name: "c-bare", server: undefined },
+      { name: "c-ok", server: "https://ok.example" },
+    ]);
+    expect(getAllUsers(cfg()).map((u) => u.name)).toEqual(["u-bare", "u-ok"]);
+    expect(getAllAvailableNamespaces(cfg())).toContain("apps");
+    expect(loadKubeconfigState().contexts).toHaveLength(2);
+  });
+
+  it("reading does not add nested maps to the file", () => {
+    switchToContext("ok");
+    expect(file()).toContain("  - name: bare\n");
+    expect(file()).not.toMatch(/name: bare\n\s+context/);
+  });
+
+  it("creates the nested map only when a value is set", () => {
+    setContextNamespace("bare", "team");
+    expect(cfg().contexts?.[0]).toEqual({ name: "bare", context: { cluster: "", user: "", namespace: "team" } });
+  });
+
+  it("switchToContextWithNamespace and modifyContext work on a bare context", () => {
+    switchToContextWithNamespace("bare", "n1");
+    expect(cfg().contexts?.[0].context?.namespace).toBe("n1");
+    modifyContext("bare", { cluster: "c-ok", user: "u-ok" });
+    expect(cfg().contexts?.[0].context).toMatchObject({ cluster: "c-ok", user: "u-ok" });
+  });
+
+  it("deletes a bare context, including with removeUnused", () => {
+    switchToContext("ok");
+    expect(deleteContext("bare", { removeUnused: true })).toEqual({});
+    expect(cfg().contexts?.map((c) => c.name)).toEqual(["ok"]);
+  });
+
+  it("clearing the namespace of a bare context is a no-op", () => {
+    modifyContext("bare", { namespace: "" });
+    expect(cfg().contexts?.[0]).toEqual({ name: "bare" });
   });
 });

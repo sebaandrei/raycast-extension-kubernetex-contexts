@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -15,7 +16,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KubeconfigError } from "../kubeconfig-errors";
-import { readKubeconfigFile, writeKubeconfigFile } from "../kubeconfig-io";
+import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "../kubeconfig-io";
 
 const SAMPLE = `# top comment
 apiVersion: v1
@@ -85,6 +86,41 @@ describe("readKubeconfigFile", () => {
   it("rejects non-mapping documents", () => {
     writeFileSync(path, "- a\n- b\n");
     expect(() => readKubeconfigFile(path)).toThrow(/Invalid kubeconfig format/);
+  });
+
+  it.each([
+    ["contexts", "contexts: {a: 1}\n"],
+    ["clusters", "clusters: nope\n"],
+    ["users", "users: 5\n"],
+  ])("rejects %s that is not a list", (key, content) => {
+    writeFileSync(path, content);
+    let error: unknown;
+    try {
+      readKubeconfigFile(path);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(KubeconfigError);
+    expect((error as KubeconfigError).message).toBe(`Invalid kubeconfig: "${key}" must be a list`);
+    expect((error as KubeconfigError).action).toBeTruthy();
+  });
+
+  it.each([
+    ["a scalar entry", "contexts:\n  - just-a-string\n"],
+    ["an entry without a name", "clusters:\n  - cluster: {server: https://x}\n"],
+    ["an entry with a non-string name", "users:\n  - name: 7\n"],
+  ])("rejects %s", (_label, content) => {
+    writeFileSync(path, content);
+    expect(() => readKubeconfigFile(path)).toThrow(KubeconfigError);
+    expect(() => readKubeconfigFile(path)).toThrow(/Invalid kubeconfig: entry 1 of/);
+  });
+
+  it("accepts entries without their nested map and does not add keys", () => {
+    writeFileSync(path, "contexts:\n  - name: bare\n");
+    const config = readKubeconfigFile(path);
+    expect(config).toStrictEqual({ contexts: [{ name: "bare" }] });
+    writeKubeconfigFile(config, path);
+    expect(readFileSync(path, "utf8")).toBe("contexts:\n  - name: bare\n");
   });
 
   it("reports a missing file with an action", () => {
@@ -258,6 +294,129 @@ describe("writeKubeconfigFile", () => {
     expect(() => writeKubeconfigFile(config, path)).toThrow();
     expect(readFileSync(path, "utf8")).toBe(SAMPLE);
     expect(readdirSync(dir)).toEqual(["config"]);
+  });
+
+  it("throws when the write target differs from the path that was read", () => {
+    seed();
+    const other = join(dir, "other");
+    writeFileSync(other, "current-context: z\n");
+    const config = readKubeconfigFile(path);
+    config["current-context"] = "b";
+
+    let error: unknown;
+    try {
+      writeKubeconfigFile(config, other);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(KubeconfigError);
+    expect((error as KubeconfigError).message).toBe("Kubeconfig path changed while editing");
+    expect((error as KubeconfigError).action).toBe("Retry the action");
+    expect(readFileSync(other, "utf8")).toBe("current-context: z\n");
+    expect(readFileSync(path, "utf8")).toBe(SAMPLE);
+  });
+
+  it("does not recreate a file that was deleted after it was read", () => {
+    seed();
+    const config = readKubeconfigFile(path);
+    config["current-context"] = "b";
+    unlinkSync(path);
+
+    expect(() => writeKubeconfigFile(config, path)).toThrow(/changed on disk/);
+    expect(existsSync(path)).toBe(false);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("still writes a config that was never read from disk, without comments", () => {
+    seed();
+    const config: KubeConfig = { "current-context": "fresh", contexts: [] };
+    writeKubeconfigFile(config, path);
+    const out = readFileSync(path, "utf8");
+    // Documented limitation: no source document, so the old comments are gone
+    expect(out).not.toContain("# top comment");
+    expect(readKubeconfigFile(path)).toStrictEqual(config);
+  });
+
+  it("round-trips scalar type changes, removed keys, reordering and unnamed sequences", () => {
+    seed(
+      [
+        "# c",
+        "current-context: a",
+        "extra: {n: 1, flag: true, list: [x, y, z], drop: me}",
+        "contexts:",
+        "  - name: a",
+        "    context: {cluster: ca, user: ua}",
+        "  - name: b",
+        "    context: {cluster: cb, user: ub}",
+        "",
+      ].join("\n")
+    );
+    const config = readKubeconfigFile(path) as KubeConfig & { extra: Record<string, unknown> };
+    // scalar type change, key set to undefined, sequence reorder and removal of unnamed items
+    config.extra.n = "one";
+    config.extra.flag = 0;
+    config.extra.drop = undefined;
+    config.extra.list = ["z", "x"];
+    config.contexts!.reverse();
+
+    writeKubeconfigFile(config, path);
+    const reread = readKubeconfigFile(path);
+    expect(reread).toStrictEqual(JSON.parse(JSON.stringify(config)));
+    expect(reread.contexts!.map((c) => c.name)).toEqual(["b", "a"]);
+    expect((reread as typeof config).extra).toStrictEqual({ n: "one", flag: 0, list: ["z", "x"] });
+  });
+
+  // Behaviour pinned as-is: a multi-document file is read as its first document
+  // (with the yaml library's "multiple documents" error surfacing as invalid YAML).
+  it("rejects a multi-document YAML file", () => {
+    writeFileSync(path, "current-context: a\n---\ncurrent-context: b\n");
+    expect(() => readKubeconfigFile(path)).toThrow(/Invalid YAML/);
+  });
+
+  it("does not report a failed stat after a successful rename as a write failure", () => {
+    seed();
+    const config = readKubeconfigFile(path);
+    config["current-context"] = "b";
+    writeKubeconfigFile(config, path);
+    // The remembered source is refreshed, so a second write does not see a conflict
+    config["current-context"] = "a";
+    expect(() => writeKubeconfigFile(config, path)).not.toThrow();
+  });
+
+  describe.skipIf(process.getuid?.() === 0)("permissions", () => {
+    afterEach(() => {
+      try {
+        chmodSync(path, 0o600);
+      } catch {
+        // file may not exist
+      }
+      chmodSync(dir, 0o700);
+    });
+
+    it("reports a permission error when reading an unreadable file", () => {
+      seed();
+      chmodSync(path, 0o000);
+      expect(() => readKubeconfigFile(path)).toThrow(/Permission denied accessing/);
+    });
+
+    it("names the directory when it cannot write next to the kubeconfig", () => {
+      seed();
+      const config = readKubeconfigFile(path);
+      config["current-context"] = "b";
+      chmodSync(dir, 0o500);
+
+      let error: unknown;
+      try {
+        writeKubeconfigFile(config, path);
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(KubeconfigError);
+      expect((error as KubeconfigError).message).toContain(`Permission denied writing in ${realpathSync(dir)}`);
+      expect((error as KubeconfigError).action).not.toContain("chmod 600");
+      chmodSync(dir, 0o700);
+      expect(readFileSync(path, "utf8")).toBe(SAMPLE);
+    });
   });
 
   it("rejects non-object config", () => {

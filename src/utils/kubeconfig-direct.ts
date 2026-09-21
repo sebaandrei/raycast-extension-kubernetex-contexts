@@ -1,4 +1,3 @@
-import { readFileSync } from "fs";
 import { KubernetesContext, ClusterDetails } from "../types";
 import { KubeconfigError, ValidationError } from "./kubeconfig-errors";
 import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "./kubeconfig-io";
@@ -8,21 +7,24 @@ import { getPreferences } from "./preferences";
 import { detectCloudProvider } from "./cloud-provider";
 
 /**
- * Get the kubeconfig file path from preferences, environment or default
+ * Get the kubeconfig file path from preferences, the first `$KUBECONFIG` entry or the default
  */
 export function getKubeconfigPath(): string {
   return resolveKubeconfigPath(getPreferences().kubeconfigPath);
 }
 
 /**
- * Read and parse the kubeconfig file
+ * Read and parse the kubeconfig file.
+ * Throws KubeconfigError for unreadable, empty or structurally invalid files.
  */
 export function readKubeconfig(kubeconfigPath: string = getKubeconfigPath()): KubeConfig {
   return readKubeconfigFile(kubeconfigPath);
 }
 
 /**
- * Write kubeconfig back to file, preserving comments and permissions
+ * Write kubeconfig back to file, preserving permissions. Comments are
+ * preserved only when `config` is the object returned by `readKubeconfig`
+ * (not a copy or a hand-built object).
  */
 export function writeKubeconfig(config: KubeConfig, kubeconfigPath: string = getKubeconfigPath()): void {
   writeKubeconfigFile(config, kubeconfigPath);
@@ -47,13 +49,14 @@ export function getClusterDetails(clusterName: string, config?: KubeConfig): Clu
     return null;
   }
 
-  const server = cluster.cluster.server || "";
-  const isSecure = !cluster.cluster["insecure-skip-tls-verify"];
-  const hasCA = !!(cluster.cluster["certificate-authority"] || cluster.cluster["certificate-authority-data"]);
+  // A malformed entry may lack its nested `cluster:` map
+  const body = cluster.cluster ?? {};
+  const server = body.server || "";
+  const hasCA = !!(body["certificate-authority"] || body["certificate-authority-data"]);
 
   let hostname = "Unknown";
   let port = "Unknown";
-  let protocol = "Unknown";
+  let protocol: ClusterDetails["protocol"] = "Unknown";
 
   if (server) {
     try {
@@ -68,6 +71,9 @@ export function getClusterDetails(clusterName: string, config?: KubeConfig): Clu
       hostname = match ? match[1] : "Unknown";
     }
   }
+
+  // Secure means HTTPS with certificate verification on
+  const isSecure = protocol === "HTTPS" && !body["insecure-skip-tls-verify"];
 
   return {
     name: clusterName,
@@ -91,7 +97,7 @@ export function getUserAuthMethod(userName: string, config?: KubeConfig) {
     return "Unknown";
   }
 
-  const userConfig = user.user ?? {};
+  const userConfig = user.user ?? {}; // may be missing in a malformed entry
 
   if (userConfig.token) return "Token";
   if (userConfig.tokenFile) return "Token File";
@@ -114,8 +120,9 @@ export function getAllContexts(config: KubeConfig = readKubeconfig()): Kubernete
   }
 
   return config.contexts.map((ctx) => {
-    const clusterDetails = getClusterDetails(ctx.context.cluster, config) ?? undefined;
-    const exec = config.users?.find((u) => u.name === ctx.context.user)?.user?.exec;
+    const { cluster = "", user = "", namespace } = ctx.context ?? {};
+    const clusterDetails = getClusterDetails(cluster, config) ?? undefined;
+    const exec = config.users?.find((u) => u.name === user)?.user?.exec;
     const cloudProvider = detectCloudProvider({
       execCommand: typeof exec?.command === "string" ? exec.command : undefined,
       execArgs: Array.isArray(exec?.args) ? exec.args.filter((a): a is string => typeof a === "string") : undefined,
@@ -123,12 +130,12 @@ export function getAllContexts(config: KubeConfig = readKubeconfig()): Kubernete
     });
     return {
       name: ctx.name,
-      cluster: ctx.context.cluster,
-      user: ctx.context.user,
-      namespace: ctx.context.namespace,
+      cluster,
+      user,
+      namespace,
       current: ctx.name === currentContext,
       clusterDetails,
-      userAuthMethod: getUserAuthMethod(ctx.context.user, config),
+      userAuthMethod: getUserAuthMethod(user, config),
       cloudProvider,
     };
   });
@@ -153,6 +160,14 @@ function requireContext(config: KubeConfig, contextName: string) {
     );
   }
   return context;
+}
+
+type ContextEntry = NonNullable<KubeConfig["contexts"]>[number];
+
+/** Set the namespace, creating the nested `context:` map of a malformed entry only now */
+function setNamespace(entry: ContextEntry, namespace: string): void {
+  entry.context ??= { cluster: "", user: "" };
+  entry.context.namespace = namespace;
 }
 
 /**
@@ -181,15 +196,14 @@ function assertValidNamespace(namespace: string): void {
 export function setContextNamespace(contextName: string, namespace: string): void {
   assertValidNamespace(namespace);
   updateConfig((config) => {
-    requireContext(config, contextName).context.namespace = namespace;
+    setNamespace(requireContext(config, contextName), namespace);
   });
 }
 
 /**
- * Get available namespaces (common ones + context-specific ones)
+ * The namespaces every cluster has: default, kube-system, kube-public, kube-node-lease.
  */
 export function getCommonNamespaces(): string[] {
-  // Common Kubernetes namespaces
   return ["default", "kube-system", "kube-public", "kube-node-lease"];
 }
 
@@ -201,8 +215,9 @@ export function getNamespacesFromContexts(config: KubeConfig = readKubeconfig())
 
   if (config.contexts) {
     config.contexts.forEach((ctx) => {
-      if (ctx.context.namespace) {
-        namespaces.add(ctx.context.namespace);
+      const namespace = ctx.context?.namespace;
+      if (namespace) {
+        namespaces.add(namespace);
       }
     });
   }
@@ -233,23 +248,10 @@ export function switchToContextWithNamespace(contextName: string, namespace?: st
   updateConfig((config) => {
     const context = requireContext(config, contextName);
     if (namespace) {
-      context.context.namespace = namespace;
+      setNamespace(context, namespace);
     }
     config["current-context"] = contextName;
   });
-}
-
-/**
- * Check if kubeconfig file exists and is readable
- */
-export function isKubeconfigAvailable(): boolean {
-  try {
-    const kubeconfigPath = getKubeconfigPath();
-    readFileSync(kubeconfigPath, "utf8");
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export interface CreateContextOptions {
@@ -352,20 +354,26 @@ export function deleteContext(contextName: string, options: { removeUnused?: boo
       );
     }
 
-    config.contexts!.splice(config.contexts!.indexOf(context), 1);
+    const contexts = config.contexts ?? [];
+    contexts.splice(contexts.indexOf(context), 1);
 
     const result: DeleteContextResult = {};
     if (options.removeUnused) {
-      const { cluster, user } = context.context;
+      const { cluster, user } = context.context ?? {};
 
       if (
-        !config.contexts!.some((ctx) => ctx.context.cluster === cluster) &&
+        cluster !== undefined &&
+        !contexts.some((ctx) => ctx.context?.cluster === cluster) &&
         config.clusters?.some((c) => c.name === cluster)
       ) {
         config.clusters = config.clusters.filter((c) => c.name !== cluster);
         result.removedCluster = cluster;
       }
-      if (!config.contexts!.some((ctx) => ctx.context.user === user) && config.users?.some((u) => u.name === user)) {
+      if (
+        user !== undefined &&
+        !contexts.some((ctx) => ctx.context?.user === user) &&
+        config.users?.some((u) => u.name === user)
+      ) {
         config.users = config.users.filter((u) => u.name !== user);
         result.removedUser = user;
       }
@@ -409,6 +417,7 @@ export function modifyContext(
       if (!config.clusters?.some((c) => c.name === updates.cluster)) {
         throw new ValidationError(`Cluster "${updates.cluster}" does not exist`, "Choose an existing cluster");
       }
+      context.context ??= { cluster: updates.cluster, user: "" };
       context.context.cluster = updates.cluster;
     }
 
@@ -416,14 +425,15 @@ export function modifyContext(
       if (!config.users?.some((u) => u.name === updates.user)) {
         throw new ValidationError(`User "${updates.user}" does not exist`, "Choose an existing user");
       }
+      context.context ??= { cluster: "", user: updates.user };
       context.context.user = updates.user;
     }
 
     if (updates.namespace !== undefined) {
       if (updates.namespace === "") {
-        delete context.context.namespace;
+        if (context.context) delete context.context.namespace;
       } else {
-        context.context.namespace = updates.namespace;
+        setNamespace(context, updates.namespace);
       }
     }
   });
@@ -439,7 +449,7 @@ export function getAllClusters(config: KubeConfig = readKubeconfig()): Array<{ n
 
   return config.clusters.map((cluster) => ({
     name: cluster.name,
-    server: cluster.cluster.server,
+    server: cluster.cluster?.server,
   }));
 }
 
@@ -458,17 +468,18 @@ export function getAllUsers(config: KubeConfig = readKubeconfig()): Array<{ name
 }
 
 export interface KubeconfigState {
-  path: string;
-  contexts: KubernetesContext[];
-  currentContext: string | null;
-  namespaces: string[];
-  clusters: Array<{ name: string; server?: string }>;
-  users: Array<{ name: string; authMethod?: string }>;
+  readonly path: string;
+  readonly contexts: KubernetesContext[];
+  readonly currentContext: string | null;
+  readonly namespaces: string[];
+  readonly clusters: Array<{ name: string; server?: string }>;
+  readonly users: Array<{ name: string; authMethod?: string }>;
 }
 
 /**
  * Read the kubeconfig once and derive everything the commands need from it.
- * The result is plain data so it can be cached. Throws the typed error if the file is unreadable.
+ * The result is plain data so it can be cached.
+ * Throws KubeconfigError for unreadable, empty or invalid files.
  */
 export function loadKubeconfigState(path: string = getKubeconfigPath()): KubeconfigState {
   const config = readKubeconfig(path);

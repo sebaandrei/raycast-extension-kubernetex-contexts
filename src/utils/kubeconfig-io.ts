@@ -72,15 +72,42 @@ function errorCode(error: unknown): string | undefined {
   return error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
 }
 
+/**
+ * Map an errno error to a user-facing error. For writes, ENOENT/EACCES/EPERM/EROFS
+ * usually concern the parent directory (lock file, temp file, rename), not the
+ * kubeconfig file itself, so the message names the directory in that case.
+ */
 function toFileError(error: unknown, path: string, action: "read" | "write"): KubeconfigError {
-  switch (errorCode(error)) {
+  const code = errorCode(error);
+  const errorPath = (error as NodeJS.ErrnoException | undefined)?.path;
+  // Lock and temp files sit next to the kubeconfig under a different name
+  const inDirectory = action === "write" && typeof errorPath === "string" && basename(errorPath) !== basename(path);
+  const dir = inDirectory ? dirname(errorPath as string) : dirname(path);
+
+  switch (code) {
     case "ENOENT":
+      if (inDirectory) {
+        return new KubeconfigError(
+          `Cannot write to ${dir}: the directory does not exist`,
+          "Create the directory or set the Kubeconfig Path in the extension preferences"
+        );
+      }
       return new KubeconfigError(
         `Kubeconfig file not found at ${path}`,
         "Create a kubeconfig file, set the Kubeconfig Path in the extension preferences, or set the KUBECONFIG environment variable"
       );
     case "EACCES":
     case "EPERM":
+    case "EROFS":
+      if (inDirectory) {
+        return new KubeconfigError(
+          `Permission denied writing in ${dir}`,
+          `The directory must be writable to update the kubeconfig: check its permissions (${dir})`
+        );
+      }
+      if (code === "EROFS") {
+        return new KubeconfigError(`Cannot write ${path}: read-only file system`, "Use a writable location");
+      }
       return new KubeconfigError(
         `Permission denied ${action === "read" ? "accessing" : "writing"} ${path}`,
         `Fix file permissions: chmod 600 ${path}`
@@ -90,8 +117,9 @@ function toFileError(error: unknown, path: string, action: "read" | "write"): Ku
     default:
       console.error(`Failed to ${action} kubeconfig:`, error);
       return new KubeconfigError(
-        `Failed to ${action} kubeconfig file`,
-        action === "read" ? "Check the file exists and is accessible" : "Check file permissions and disk space"
+        `Failed to ${action} kubeconfig file${code ? ` (${code})` : error instanceof Error ? `: ${error.message}` : ""}`,
+        action === "read" ? "Check the file exists and is accessible" : "Check file permissions and disk space",
+        { cause: error }
       );
   }
 }
@@ -100,8 +128,41 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const LIST_KEYS = ["contexts", "clusters", "users"] as const;
+
 /**
- * Read and parse a kubeconfig file
+ * Reject shapes that would make later code throw opaque TypeErrors: the three
+ * lists must be lists of objects with a string `name`. Nested `context:` /
+ * `cluster:` / `user:` maps may be missing; readers tolerate that.
+ */
+function assertValidStructure(config: Record<string, unknown>): void {
+  for (const key of LIST_KEYS) {
+    const list = config[key];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) {
+      throw new KubeconfigError(
+        `Invalid kubeconfig: "${key}" must be a list`,
+        `Fix the "${key}" section of your kubeconfig`
+      );
+    }
+    list.forEach((entry, index) => {
+      if (!isPlainObject(entry) || typeof entry.name !== "string") {
+        throw new KubeconfigError(
+          `Invalid kubeconfig: entry ${index + 1} of "${key}" must be a mapping with a "name"`,
+          `Fix or remove that entry in the "${key}" section of your kubeconfig`
+        );
+      }
+    });
+  }
+}
+
+/**
+ * Read and parse a kubeconfig file.
+ *
+ * The parsed YAML document and the file's mtime/size are remembered against
+ * the returned object. Pass that same object (not a copy) to
+ * `writeKubeconfigFile`: a copy loses comment preservation and the check for
+ * concurrent modification.
  */
 export function readKubeconfigFile(kubeconfigPath: string): KubeConfig {
   let realPath: string;
@@ -131,6 +192,8 @@ export function readKubeconfigFile(kubeconfigPath: string): KubeConfig {
   if (!isPlainObject(config)) {
     throw new KubeconfigError("Invalid kubeconfig format", "Check your kubeconfig syntax and structure");
   }
+
+  assertValidStructure(config);
 
   sources.set(config, { doc, path: realPath, mtimeMs: stat.mtimeMs, size: stat.size });
   return config as KubeConfig;
@@ -192,8 +255,9 @@ function syncNode(existing: unknown, value: unknown, doc: Document): unknown {
 function unlinkQuietly(path: string): void {
   try {
     unlinkSync(path);
-  } catch {
-    // Nothing to clean up
+  } catch (error) {
+    // A leftover temp file may contain credentials, so make failures visible
+    if (errorCode(error) !== "ENOENT") console.warn(`Could not remove ${path}:`, error);
   }
 }
 
@@ -204,17 +268,27 @@ function atomicWrite(target: string, content: string, mode: number): void {
   const tempPath = join(dirname(target), `.${basename(target)}.${process.pid}.${Date.now()}.tmp`);
   const fd = openSync(tempPath, "wx", mode);
 
+  let failure: { error: unknown } | undefined;
   try {
     fchmodSync(fd, mode);
     // writeFileSync on a descriptor loops until every byte is written
     writeFileSync(fd, content, "utf8");
     fsyncSync(fd);
   } catch (error) {
-    closeSync(fd);
-    unlinkQuietly(tempPath);
-    throw error;
+    failure = { error };
   }
-  closeSync(fd);
+
+  try {
+    closeSync(fd);
+  } catch (closeError) {
+    // Keep the original failure if there was one
+    failure ??= { error: closeError };
+  }
+
+  if (failure) {
+    unlinkQuietly(tempPath);
+    throw failure.error;
+  }
 
   try {
     renameSync(tempPath, target);
@@ -234,6 +308,8 @@ function sleep(ms: number): void {
 /**
  * Hold `<kubeconfig>.lock` while running `fn`. kubectl uses the same lock
  * file, so concurrent kubectl writes and ours exclude each other.
+ * Retries for about 0.5s (10 attempts, 50ms apart), then gives up. A lock
+ * file that is already there is never removed, even if it looks stale.
  */
 function withLock<T>(target: string, fn: () => T): T {
   const lockPath = `${target}.lock`;
@@ -244,7 +320,7 @@ function withLock<T>(target: string, fn: () => T): T {
       fd = openSync(lockPath, "wx", NEW_FILE_MODE);
     } catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
-      sleep(LOCK_WAIT_MS);
+      if (attempt < LOCK_ATTEMPTS - 1) sleep(LOCK_WAIT_MS);
     }
   }
 
@@ -277,7 +353,13 @@ function resolveWriteTarget(kubeconfigPath: string): string {
   try {
     lstatSync(kubeconfigPath);
   } catch {
-    return kubeconfigPath;
+    // Not there at all: resolve the directory so the path compares equal to a
+    // previously resolved one (e.g. /var vs /private/var on macOS)
+    try {
+      return join(realpathSync(dirname(kubeconfigPath)), basename(kubeconfigPath));
+    } catch {
+      return kubeconfigPath;
+    }
   }
   throw new KubeconfigError(
     `${kubeconfigPath} is a symlink to a file that does not exist`,
@@ -286,7 +368,14 @@ function resolveWriteTarget(kubeconfigPath: string): string {
 }
 
 /**
- * Write a kubeconfig back to disk, preserving comments and file mode
+ * Write a kubeconfig back to disk.
+ *
+ * - Takes `<file>.lock` for the duration (kubectl-compatible).
+ * - Refuses to write if the file changed on disk since it was read.
+ * - Writes atomically (temp file + rename) and keeps the existing file mode.
+ * - Preserves comments and formatting only for objects returned by
+ *   `readKubeconfigFile`. Any other object is serialised from scratch, without
+ *   comments and without the conflict check.
  */
 export function writeKubeconfigFile(config: KubeConfig, kubeconfigPath: string): void {
   if (!isPlainObject(config)) {
@@ -306,8 +395,12 @@ export function writeKubeconfigFile(config: KubeConfig, kubeconfigPath: string):
         if (errorCode(error) !== "ENOENT") throw error;
       }
 
-      const candidate = sources.get(config);
-      const source = candidate?.path === target ? candidate : undefined;
+      // A config that was never read through readKubeconfigFile has no source and
+      // falls back to a fresh document below (comments are lost, no conflict check)
+      const source = sources.get(config);
+      if (source && source.path !== target) {
+        throw new KubeconfigError("Kubeconfig path changed while editing", "Retry the action");
+      }
 
       if (source && (!currentStat || currentStat.mtimeMs !== source.mtimeMs || currentStat.size !== source.size)) {
         throw new KubeconfigError(
@@ -333,12 +426,18 @@ export function writeKubeconfigFile(config: KubeConfig, kubeconfigPath: string):
       atomicWrite(target, content, mode);
 
       const written = statSync(target);
+      assertValidStructure(config);
+
       sources.set(config, { doc, path: target, mtimeMs: written.mtimeMs, size: written.size });
     });
   } catch (error) {
     if (error instanceof KubeconfigError || error instanceof ValidationError) {
       throw error;
     }
-    throw toFileError(error, kubeconfigPath, "write");
+    if (typeof errorCode(error) === "string") {
+      throw toFileError(error, kubeconfigPath, "write");
+    }
+    console.error("Failed to write kubeconfig:", error);
+    throw new KubeconfigError("Failed to write kubeconfig file", "Unexpected error while writing", { cause: error });
   }
 }

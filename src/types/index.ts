@@ -6,7 +6,7 @@ export interface ClusterDetails {
   server: string;
   isSecure: boolean;
   hasCA: boolean;
-  protocol: string;
+  protocol: "HTTPS" | "HTTP" | "Unknown";
   hostname: string;
   port: string;
 }
@@ -21,12 +21,4 @@ export interface KubernetesContext {
   clusterDetails?: ClusterDetails;
   userAuthMethod?: string;
   cloudProvider?: CloudProvider;
-}
-
-// Error handling
-export class ContextNotFoundError extends Error {
-  constructor(contextName: string) {
-    super(`Context "${contextName}" not found`);
-    this.name = "ContextNotFoundError";
-  }
 }

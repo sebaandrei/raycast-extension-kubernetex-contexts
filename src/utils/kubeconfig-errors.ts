@@ -1,5 +1,5 @@
 /**
- * Creates user-friendly validation errors
+ * Error with an optional `action` hint shown to the user
  */
 export class ValidationError extends Error {
   constructor(
@@ -12,14 +12,15 @@ export class ValidationError extends Error {
 }
 
 /**
- * Creates user-friendly kubeconfig errors
+ * Error with an optional `action` hint shown to the user
  */
 export class KubeconfigError extends Error {
   constructor(
     message: string,
-    public action?: string
+    public action?: string,
+    options?: ErrorOptions
   ) {
-    super(message);
+    super(message, options);
     this.name = "KubeconfigError";
   }
 }
