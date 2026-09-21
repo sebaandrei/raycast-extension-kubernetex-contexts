@@ -2,6 +2,7 @@ import { Alert, List, ActionPanel, Action, Icon, Form, useNavigation, Keyboard, 
 import { useMemo, useState } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { createContext, deleteContext, modifyContext } from "./utils/kubeconfig-direct";
+import { ContextActions } from "./components/ContextActions";
 import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { switchAndClose } from "./utils/switch";
@@ -14,6 +15,7 @@ import {
   contextSubtitle,
   currentFirst,
   prodAccessory,
+  providerAccessory,
   serverLabel,
 } from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
@@ -86,6 +88,7 @@ export default function ManageContexts() {
           keywords={contextKeywords(context)}
           accessories={[
             ...prodAccessory(isProd(context.name)),
+            ...providerAccessory(context),
             { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
             { text: context.userAuthMethod || "Unknown", tooltip: "Authentication Method" },
             ...(context.clusterDetails
@@ -146,6 +149,7 @@ export default function ManageContexts() {
                 onAction={refresh}
                 shortcut={Keyboard.Shortcut.Common.Refresh}
               />
+              <ContextActions context={context} />
             </ActionPanel>
           }
         />

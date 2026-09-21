@@ -9,11 +9,13 @@ import {
   contextKeywords,
   contextSubtitle,
   prodAccessory,
+  providerAccessory,
   serverLabel,
 } from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
 import { usePinnedRecent } from "./hooks/usePinnedRecent";
 import { buildSections } from "./utils/context-sections";
+import { ContextActions } from "./components/ContextActions";
 import { KubernetesContext } from "./types";
 
 export default function ListContexts() {
@@ -38,6 +40,7 @@ export default function ListContexts() {
       keywords={contextKeywords(context)}
       accessories={[
         ...prodAccessory(isProd(context.name)),
+        ...providerAccessory(context),
         { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
         { text: context.userAuthMethod || "Unknown", tooltip: "Authentication Method" },
         ...(context.clusterDetails
@@ -87,6 +90,7 @@ export default function ListContexts() {
               )
             }
           />
+          <ContextActions context={context} />
         </ActionPanel>
       }
     />

@@ -1,4 +1,5 @@
 import { Detail, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
+import { ContextActions } from "./ContextActions";
 import { KubernetesContext } from "../types";
 import { escapeMarkdown } from "../utils/markdown";
 
@@ -69,6 +70,7 @@ ${
           <Detail.Metadata.Label title="Namespace" text={context.namespace || "default"} />
           <Detail.Metadata.Separator />
           <Detail.Metadata.Label title="Authentication" text={context.userAuthMethod || "Unknown"} />
+          {context.cloudProvider && <Detail.Metadata.Label title="Cloud Provider" text={context.cloudProvider} />}
           {context.clusterDetails && (
             <>
               <Detail.Metadata.Separator />
@@ -100,6 +102,7 @@ ${
               onAction={() => onSwitch(context.name)}
             />
           )}
+          <ContextActions context={context} />
         </ActionPanel>
       }
     />

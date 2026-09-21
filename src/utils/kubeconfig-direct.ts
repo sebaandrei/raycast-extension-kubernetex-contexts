@@ -5,6 +5,7 @@ import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "./kubeconfi
 import { resolveKubeconfigPath } from "./kubeconfig-path";
 import { validateNamespace } from "./namespace";
 import { getPreferences } from "./preferences";
+import { detectCloudProvider } from "./cloud-provider";
 
 /**
  * Get the kubeconfig file path from preferences, environment or default
@@ -93,6 +94,7 @@ export function getUserAuthMethod(userName: string, config?: KubeConfig) {
   const userConfig = user.user;
 
   if (userConfig.token) return "Token";
+  if (userConfig.tokenFile) return "Token File";
   if (userConfig["client-certificate"] || userConfig["client-certificate-data"]) return "Client Certificate";
   if (userConfig.username && userConfig.password) return "Basic Auth";
   if (userConfig["auth-provider"]) return `Auth Provider (${userConfig["auth-provider"].name || "Unknown"})`;
@@ -111,15 +113,25 @@ export function getAllContexts(config: KubeConfig = readKubeconfig()): Kubernete
     return [];
   }
 
-  return config.contexts.map((ctx) => ({
-    name: ctx.name,
-    cluster: ctx.context.cluster,
-    user: ctx.context.user,
-    namespace: ctx.context.namespace,
-    current: ctx.name === currentContext,
-    clusterDetails: getClusterDetails(ctx.context.cluster, config) ?? undefined,
-    userAuthMethod: getUserAuthMethod(ctx.context.user, config),
-  }));
+  return config.contexts.map((ctx) => {
+    const clusterDetails = getClusterDetails(ctx.context.cluster, config) ?? undefined;
+    const exec = config.users?.find((u) => u.name === ctx.context.user)?.user.exec;
+    const cloudProvider = detectCloudProvider({
+      execCommand: typeof exec?.command === "string" ? exec.command : undefined,
+      execArgs: Array.isArray(exec?.args) ? exec.args.filter((a): a is string => typeof a === "string") : undefined,
+      server: clusterDetails?.server,
+    });
+    return {
+      name: ctx.name,
+      cluster: ctx.context.cluster,
+      user: ctx.context.user,
+      namespace: ctx.context.namespace,
+      current: ctx.name === currentContext,
+      clusterDetails,
+      userAuthMethod: getUserAuthMethod(ctx.context.user, config),
+      cloudProvider,
+    };
+  });
 }
 
 /**

@@ -10,11 +10,13 @@ import {
   contextKeywords,
   contextSubtitle,
   prodAccessory,
+  providerAccessory,
   serverLabel,
 } from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
 import { usePinnedRecent } from "./hooks/usePinnedRecent";
 import { buildSections } from "./utils/context-sections";
+import { ContextActions } from "./components/ContextActions";
 import { KubernetesContext } from "./types";
 
 export default function SwitchContextWithNamespace() {
@@ -65,6 +67,7 @@ export default function SwitchContextWithNamespace() {
       keywords={contextKeywords(context)}
       accessories={[
         ...prodAccessory(isProd(context.name)),
+        ...providerAccessory(context),
         { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
       ]}
       actions={
@@ -91,6 +94,7 @@ export default function SwitchContextWithNamespace() {
               )
             }
           />
+          <ContextActions context={context} />
         </ActionPanel>
       }
     />

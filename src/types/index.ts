@@ -18,6 +18,7 @@ export interface KubernetesContext {
   current?: boolean;
   clusterDetails?: ClusterDetails;
   userAuthMethod?: string;
+  cloudProvider?: string;
 }
 
 export interface ContextListItem {

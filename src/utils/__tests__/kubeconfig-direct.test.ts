@@ -324,6 +324,34 @@ describe("read helpers", () => {
     expect(getUserAuthMethod("ghost", cfg())).toBe("Unknown");
   });
 
+  it("getUserAuthMethod detects tokenFile", () => {
+    const config = { users: [{ name: "tf", user: { tokenFile: "/var/run/token" } }] } as unknown as ReturnType<
+      typeof cfg
+    >;
+    expect(getUserAuthMethod("tf", config)).toBe("Token File");
+  });
+
+  it("getAllContexts sets cloudProvider from exec command or server host", () => {
+    const config = {
+      contexts: [
+        { name: "a", context: { cluster: "c1", user: "u1" } },
+        { name: "b", context: { cluster: "c2", user: "u2" } },
+        { name: "c", context: { cluster: "c3", user: "u3" } },
+      ],
+      clusters: [
+        { name: "c1", cluster: { server: "https://x.example.com" } },
+        { name: "c2", cluster: { server: "https://x.hcp.westeurope.azmk8s.io:443" } },
+        { name: "c3", cluster: { server: "https://y.example.com" } },
+      ],
+      users: [
+        { name: "u1", user: { exec: { command: "/usr/bin/aws", args: ["eks", "get-token"] } } },
+        { name: "u2", user: { token: "t" } },
+        { name: "u3", user: { token: "t" } },
+      ],
+    } as unknown as ReturnType<typeof cfg>;
+    expect(getAllContexts(config).map((c) => c.cloudProvider)).toEqual(["EKS", "AKS", undefined]);
+  });
+
   it("getAllContexts flags the current context", () => {
     const contexts = getAllContexts();
     expect(contexts.map((c) => [c.name, c.current])).toEqual([

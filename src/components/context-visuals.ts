@@ -16,6 +16,11 @@ export function prodAccessory(isProd: boolean): List.Item.Accessory[] {
   return isProd ? [{ tag: { value: "PROD", color: Color.Red }, tooltip: "Production context" }] : [];
 }
 
+/** Zero or one accessory showing EKS / AKS / GKE. */
+export function providerAccessory(context: Pick<KubernetesContext, "cloudProvider">): List.Item.Accessory[] {
+  return context.cloudProvider ? [{ tag: context.cloudProvider, tooltip: "Cloud provider" }] : [];
+}
+
 /** Short row subtitle: `cluster • user`. */
 export function contextSubtitle(context: KubernetesContext): string {
   return [context.cluster, context.user].filter(Boolean).join(" • ");
