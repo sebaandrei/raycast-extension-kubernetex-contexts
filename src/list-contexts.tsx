@@ -80,7 +80,12 @@ export default function ListContexts() {
             title={pinnedNames.has(context.name) ? "Unpin Context" : "Pin Context"}
             icon={pinnedNames.has(context.name) ? Icon.PinDisabled : Icon.Pin}
             shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
-            onAction={() => toggle(context.name)}
+            onAction={() =>
+              toggle(
+                context.name,
+                contexts.map((ctx) => ctx.name)
+              )
+            }
           />
         </ActionPanel>
       }

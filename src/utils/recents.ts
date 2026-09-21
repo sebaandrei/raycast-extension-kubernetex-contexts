@@ -40,18 +40,25 @@ export function getPinnedContexts(): Promise<string[]> {
   return readNames(PINNED_KEY, MAX_PINNED_CONTEXTS);
 }
 
-/** Pin or unpin a context. Returns the new pinned state (false on failure or when the pin limit is reached). Never throws. */
-export async function togglePin(name: string): Promise<boolean> {
+export type TogglePinResult = { ok: true; pinned: boolean } | { ok: false; reason: "limit" | "storage" };
+
+/**
+ * Pin or unpin a context. Pins for contexts not in `existing` (deleted or renamed) are
+ * dropped first so they cannot use up the pin limit. Never throws.
+ */
+export async function togglePin(name: string, existing?: string[]): Promise<TogglePinResult> {
   try {
-    const current = await readNames(PINNED_KEY, MAX_PINNED_CONTEXTS);
+    const stored = await readNames(PINNED_KEY, MAX_PINNED_CONTEXTS);
+    const current = existing ? stored.filter((n) => existing.includes(n)) : stored;
+
     if (current.includes(name)) {
       await LocalStorage.setItem(PINNED_KEY, JSON.stringify(current.filter((n) => n !== name)));
-      return false;
+      return { ok: true, pinned: false };
     }
-    if (current.length >= MAX_PINNED_CONTEXTS) return false;
+    if (current.length >= MAX_PINNED_CONTEXTS) return { ok: false, reason: "limit" };
     await LocalStorage.setItem(PINNED_KEY, JSON.stringify([...current, name]));
-    return true;
+    return { ok: true, pinned: true };
   } catch {
-    return false;
+    return { ok: false, reason: "storage" };
   }
 }

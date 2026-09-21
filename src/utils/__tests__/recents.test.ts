@@ -40,24 +40,30 @@ describe("recent contexts", () => {
 
 describe("pinned contexts", () => {
   it("toggles in insertion order and returns the new state", async () => {
-    expect(await togglePin("a")).toBe(true);
-    expect(await togglePin("b")).toBe(true);
+    expect(await togglePin("a")).toEqual({ ok: true, pinned: true });
+    expect(await togglePin("b")).toEqual({ ok: true, pinned: true });
     expect(await getPinnedContexts()).toEqual(["a", "b"]);
-    expect(await togglePin("a")).toBe(false);
+    expect(await togglePin("a")).toEqual({ ok: true, pinned: false });
     expect(await getPinnedContexts()).toEqual(["b"]);
   });
 
-  it("stops pinning at 20", async () => {
+  it("stops pinning at 20 and reports the limit", async () => {
     for (let i = 0; i < 20; i++) await togglePin(`c${i}`);
-    expect(await togglePin("extra")).toBe(false);
+    expect(await togglePin("extra")).toEqual({ ok: false, reason: "limit" });
     expect(await getPinnedContexts()).toHaveLength(20);
     expect(await getPinnedContexts()).not.toContain("extra");
   });
 
-  it("never throws on storage failure", async () => {
+  it("drops pins of contexts that no longer exist so they do not use the limit", async () => {
+    for (let i = 0; i < 20; i++) await togglePin(`c${i}`);
+    expect(await togglePin("new", ["new", "c0"])).toEqual({ ok: true, pinned: true });
+    expect(await getPinnedContexts()).toEqual(["c0", "new"]);
+  });
+
+  it("reports storage failures instead of a successful unpin", async () => {
     mocks.getItem.mockRejectedValue(new Error("down"));
     mocks.setItem.mockRejectedValue(new Error("down"));
     expect(await getPinnedContexts()).toEqual([]);
-    expect(await togglePin("a")).toBe(false);
+    expect(await togglePin("a")).toEqual({ ok: false, reason: "storage" });
   });
 });
