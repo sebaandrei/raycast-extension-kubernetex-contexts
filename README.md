@@ -29,7 +29,7 @@ Writes to the kubeconfig (`src/utils/kubeconfig-io.ts`):
 - Writes are atomic: temp file in the same directory, then rename.
 - File mode is preserved (0600 for newly created files). Symlinks are followed.
 - `<kubeconfig>.lock` is held during a write, the same lock kubectl uses.
-- A write is refused if another tool changed the file since it was read.
+- A write is refused if the file's modification time or size changed since it was read (best effort; it is not a content hash).
 - No backup file is left behind.
 
 ## Keyboard shortcuts
@@ -42,7 +42,7 @@ Writes to the kubeconfig (`src/utils/kubeconfig-io.ts`):
 | Cmd+Shift+C | Context actions | Copy context name |
 | Cmd+Opt+S | Context actions | Copy server URL |
 | Cmd+Opt+K | Context actions | Copy kubectl command |
-| Cmd+R | Lists, Manage Contexts | Refresh |
+| Cmd+R | Current Context, Manage Contexts, and the empty/error views of the lists | Refresh |
 | Cmd+E, Ctrl+X, Ctrl+Shift+X | Manage Contexts | Edit, delete, delete and remove unused cluster/user (Raycast common shortcuts) |
 
 Other actions (details, open kubeconfig, show in Finder) have no shortcut.
@@ -56,9 +56,9 @@ Authentication is detected from the user entry: token, client certificate, basic
 ## Limitations
 
 - One kubeconfig file. There is no multi-file merge; when the preference is empty only the first `$KUBECONFIG` entry is used.
-- Namespaces come from the kubeconfig plus typed input. There is no live cluster lookup.
+- Namespaces are the common ones (`default`, `kube-system`, `kube-public`, `kube-node-lease`), those found in the kubeconfig, and anything you type. There is no live cluster lookup.
 - The menu bar is refreshed on an interval, not live. There is no file watcher; use Refresh after external changes.
-- Pins and recents are stored locally in Raycast LocalStorage and dropped when a context is renamed or deleted.
+- Pins and recents are stored locally in Raycast LocalStorage. Entries for a renamed or deleted context are no longer shown (a rename does not carry the pin over).
 
 ## Development
 

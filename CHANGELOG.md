@@ -27,13 +27,13 @@
 
 ### Fixed
 - Errors are shown over stale data; empty views distinguish no kubeconfig from no matches
-- Stale pins and recents are dropped when a context is renamed or deleted; pin failures are reported correctly
+- Pins and recents for renamed or deleted contexts are no longer shown and do not count towards the pin limit; pin failures are reported correctly
 - Malformed users no longer break the list; cloud badges avoid false positives from generic CLIs
 - Missing-kubeconfig hint mentions the `KUBECONFIG` environment variable
 
 ### Security
 - Kubeconfig writes are atomic (temp file and rename), preserve comments, formatting and file mode (0600 for new files), and follow symlinks
-- Writes take `<kubeconfig>.lock`, shared with kubectl, and refuse to overwrite a file changed by another tool since it was read
+- Writes take `<kubeconfig>.lock`, shared with kubectl, and refuse to overwrite a file whose modification time or size changed since it was read
 - No backup file is left behind
 - Resolve all `npm audit` vulnerabilities
 
