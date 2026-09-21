@@ -19,6 +19,7 @@ import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function ManageContexts() {
   const { contexts, clusters, users, isLoading, error, refresh, switchContext, currentContext } = useKubeconfig();
+  const [searchText, setSearchText] = useState("");
   const sortedContexts = useMemo(() => currentFirst(contexts), [contexts]);
 
   const isProd = useProductionMatcher();
@@ -56,6 +57,8 @@ export default function ManageContexts() {
   return (
     <List
       isLoading={isLoading}
+      filtering
+      onSearchTextChange={setSearchText}
       searchBarPlaceholder="Search contexts to manage"
       actions={
         <ActionPanel>
@@ -147,7 +150,7 @@ export default function ManageContexts() {
         />
       ))}
 
-      <KubeconfigEmptyView error={error} onRefresh={refresh}>
+      <KubeconfigEmptyView error={error} hasContexts={contexts.length > 0} searchText={searchText} onRefresh={refresh}>
         <Action.Push
           title="Create New Context"
           icon={Icon.Plus}

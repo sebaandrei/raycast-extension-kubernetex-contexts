@@ -1,5 +1,5 @@
 import { List, ActionPanel, Action, Icon, showToast, Toast } from "@raycast/api";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
@@ -22,10 +22,16 @@ export default function ListContexts() {
 
   const isProd = useProductionMatcher();
 
+  const [searchText, setSearchText] = useState("");
   const sortedContexts = useMemo(() => currentFirst(contexts), [contexts]);
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search contexts by name, cluster, user, or namespace">
+    <List
+      isLoading={isLoading}
+      filtering
+      onSearchTextChange={setSearchText}
+      searchBarPlaceholder="Search contexts by name, cluster, user, or namespace"
+    >
       {sortedContexts.map((context) => (
         <List.Item
           key={context.name}
@@ -83,7 +89,12 @@ export default function ListContexts() {
           }
         />
       ))}
-      <KubeconfigEmptyView error={error} onRefresh={refresh} />
+      <KubeconfigEmptyView
+        error={error}
+        hasContexts={contexts.length > 0}
+        searchText={searchText}
+        onRefresh={refresh}
+      />
     </List>
   );
 }

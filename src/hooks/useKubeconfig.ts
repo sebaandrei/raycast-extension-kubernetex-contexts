@@ -33,10 +33,19 @@ const withCurrentContext =
  */
 export function useKubeconfig() {
   // The path is part of the cache key so data from another kubeconfig is never shown
-  const { data, isLoading, error, revalidate, mutate } = useCachedPromise(loadState, [getKubeconfigPath()], {
+  const {
+    data: cached,
+    isLoading,
+    error,
+    revalidate,
+    mutate,
+  } = useCachedPromise(loadState, [getKubeconfigPath()], {
     // Callers render the error themselves; avoid a duplicate default toast
     onError: () => undefined,
   });
+
+  // A failed refresh must show the error, not the stale contexts kept by the cache
+  const data = error ? undefined : cached;
 
   const run = useCallback(
     async (operation: () => void, optimisticUpdate?: StateUpdate) => {

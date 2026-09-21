@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { List, ActionPanel, Action, useNavigation, Icon } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
@@ -16,6 +17,7 @@ import { useProductionMatcher } from "./hooks/useProductionMatcher";
 export default function SwitchContextWithNamespace() {
   const { contexts, currentContext, namespaces, isLoading, error, refresh, switchContextWithNamespace } =
     useKubeconfig();
+  const [searchText, setSearchText] = useState("");
   const { push } = useNavigation();
   const handleContextSelect = (contextName: string) => {
     const context = contexts.find((ctx) => ctx.name === contextName);
@@ -45,7 +47,12 @@ export default function SwitchContextWithNamespace() {
   const availableContexts = contexts.filter((ctx) => !ctx.current);
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search contexts to switch to">
+    <List
+      isLoading={isLoading}
+      filtering
+      onSearchTextChange={setSearchText}
+      searchBarPlaceholder="Search contexts to switch to"
+    >
       {availableContexts.map((context) => (
         <List.Item
           key={context.name}
@@ -75,14 +82,19 @@ export default function SwitchContextWithNamespace() {
         />
       ))}
 
-      {contexts.length > 0 ? (
+      {contexts.length > 0 && availableContexts.length === 0 ? (
         <List.EmptyView
           icon={Icon.CheckCircle}
           title="No Other Contexts Available"
           description={`${currentContext ?? "The current context"} is the only context in your kubeconfig`}
         />
       ) : (
-        <KubeconfigEmptyView error={error} onRefresh={refresh} />
+        <KubeconfigEmptyView
+          error={error}
+          hasContexts={availableContexts.length > 0}
+          searchText={searchText}
+          onRefresh={refresh}
+        />
       )}
     </List>
   );
