@@ -64,6 +64,14 @@ describe("recent namespaces", () => {
     await expect(rememberNamespace("a", "x")).resolves.toBeUndefined();
   });
 
+  it("does not overwrite stored data when the read fails", async () => {
+    store = JSON.stringify({ a: ["one"] });
+    mocks.getItem.mockRejectedValueOnce(new Error("down"));
+    await rememberNamespace("b", "x");
+    expect(mocks.setItem).not.toHaveBeenCalled();
+    expect(await getRecentNamespaces("a")).toEqual(["one"]);
+  });
+
   it("drops invalid, duplicate and excess entries from stored data", async () => {
     store = JSON.stringify({
       a: ["ok-1", "Bad_Name", "ok-1", 42, "", "ok-2", "ok-3", "ok-4", "ok-5", "ok-6"],

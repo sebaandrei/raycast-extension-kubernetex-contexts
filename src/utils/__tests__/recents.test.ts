@@ -36,6 +36,29 @@ describe("recent contexts", () => {
     expect(await getRecentContexts()).toEqual([]);
     await expect(rememberContext("a")).resolves.toBeUndefined();
   });
+
+  it("does not overwrite stored recents when the read fails", async () => {
+    store["recent-contexts"] = JSON.stringify(["a", "b"]);
+    mocks.getItem.mockRejectedValueOnce(new Error("down"));
+    await rememberContext("c");
+    expect(mocks.setItem).not.toHaveBeenCalled();
+    expect(await getRecentContexts()).toEqual(["a", "b"]);
+  });
+
+  it("resets corrupt JSON on the next write", async () => {
+    store["recent-contexts"] = "not json";
+    await rememberContext("a");
+    expect(mocks.setItem).toHaveBeenCalledTimes(1);
+    expect(await getRecentContexts()).toEqual(["a"]);
+  });
+
+  it("logs and survives a failing write", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.setItem.mockRejectedValue(new Error("full"));
+    await expect(rememberContext("ctx-x")).resolves.toBeUndefined();
+    expect(spy.mock.calls.some((c) => String(c[0]).includes("ctx-x"))).toBe(true);
+    spy.mockRestore();
+  });
 });
 
 describe("pinned contexts", () => {
@@ -64,6 +87,19 @@ describe("pinned contexts", () => {
     mocks.getItem.mockRejectedValue(new Error("down"));
     mocks.setItem.mockRejectedValue(new Error("down"));
     expect(await getPinnedContexts()).toEqual([]);
+    expect(await togglePin("a")).toEqual({ ok: false, reason: "storage" });
+  });
+
+  it("does not overwrite pins when the read fails", async () => {
+    store["pinned-contexts"] = JSON.stringify(["a", "b"]);
+    mocks.getItem.mockRejectedValueOnce(new Error("down"));
+    expect(await togglePin("c")).toEqual({ ok: false, reason: "storage" });
+    expect(mocks.setItem).not.toHaveBeenCalled();
+    expect(await getPinnedContexts()).toEqual(["a", "b"]);
+  });
+
+  it("reports storage when the write fails", async () => {
+    mocks.setItem.mockRejectedValue(new Error("full"));
     expect(await togglePin("a")).toEqual({ ok: false, reason: "storage" });
   });
 });

@@ -6,7 +6,9 @@ import { ContextActions } from "./components/ContextActions";
 import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { switchAndClose } from "./utils/switch";
+import { computeContextUpdates, describeRemoval, validateCreateContextForm } from "./utils/context-forms";
 import { validateNamespace } from "./utils/namespace";
+import { migrateContextName } from "./utils/context-storage";
 import { ContextDetails } from "./components/ContextDetails";
 import { KubeconfigEmptyView } from "./components/KubeconfigEmptyView";
 import {
@@ -43,14 +45,8 @@ export default function ManageContexts() {
     if (!confirmed) return;
 
     try {
-      const { removedCluster, removedUser } = deleteContext(contextName, { removeUnused });
-      const removed = [removedCluster && `cluster ${removedCluster}`, removedUser && `user ${removedUser}`].filter(
-        Boolean
-      );
-      await showSuccessToast(
-        "Context Deleted",
-        `Deleted ${contextName}${removed.length > 0 ? ` and unused ${removed.join(", ")}` : ""}`
-      );
+      const result = deleteContext(contextName, { removeUnused });
+      await showSuccessToast("Context Deleted", describeRemoval(contextName, result));
       refresh();
     } catch (err) {
       await showErrorToast(err as Error);
@@ -204,34 +200,17 @@ function CreateContextForm({
     userName?: string;
     namespace?: string;
   }) {
-    // Validation
-    if (!values.name.trim()) {
-      setNameError("Context name is required");
+    const errors = validateCreateContextForm(values, { useExistingCluster, useExistingUser });
+    if (errors) {
+      setNameError(errors.name);
+      setClusterError(errors.cluster);
+      setUserError(errors.user);
+      setServerError(errors.server);
+      setNamespaceError(errors.namespace);
       return;
     }
-
-    const clusterName = useExistingCluster ? values.cluster?.trim() : values.clusterName?.trim();
-    if (!clusterName) {
-      setClusterError("Cluster name is required");
-      return;
-    }
-
-    const userName = useExistingUser ? values.user?.trim() : values.userName?.trim();
-    if (!userName) {
-      setUserError("User name is required");
-      return;
-    }
-
-    if (!useExistingCluster && !values.clusterServer?.trim()) {
-      setServerError("Server URL is required for a new cluster");
-      return;
-    }
-
-    const namespaceProblem = values.namespace?.trim() ? validateNamespace(values.namespace.trim()) : undefined;
-    if (namespaceProblem) {
-      setNamespaceError(namespaceProblem);
-      return;
-    }
+    const clusterName = (useExistingCluster ? values.cluster : values.clusterName)?.trim() ?? "";
+    const userName = (useExistingUser ? values.user : values.userName)?.trim() ?? "";
 
     try {
       createContext(
@@ -369,7 +348,6 @@ function ModifyContextForm({
   const [namespaceError, setNamespaceError] = useState<string | undefined>();
 
   async function handleSubmit(values: { name: string; cluster?: string; user?: string; namespace?: string }) {
-    // Validation
     if (!values.name.trim()) {
       setNameError("Context name is required");
       return;
@@ -382,32 +360,7 @@ function ModifyContextForm({
     }
 
     try {
-      const updates: {
-        newName?: string;
-        cluster?: string;
-        user?: string;
-        namespace?: string;
-      } = {};
-
-      if (values.name.trim() !== context.name) {
-        updates.newName = values.name.trim();
-      }
-
-      const newCluster = values.cluster?.trim();
-      if (newCluster && newCluster !== context.cluster) {
-        updates.cluster = newCluster;
-      }
-
-      const newUser = values.user?.trim();
-      if (newUser && newUser !== context.user) {
-        updates.user = newUser;
-      }
-
-      const newNamespace = values.namespace?.trim() || "";
-      const currentNamespace = context.namespace || "";
-      if (newNamespace !== currentNamespace) {
-        updates.namespace = newNamespace;
-      }
+      const updates = computeContextUpdates(context, values);
 
       if (Object.keys(updates).length === 0) {
         await showSuccessToast("No Changes", "No modifications were made");
@@ -416,6 +369,7 @@ function ModifyContextForm({
       }
 
       modifyContext(context.name, updates);
+      if (updates.newName) await migrateContextName(context.name, updates.newName);
 
       await showSuccessToast("Context Modified", `Successfully updated context: ${values.name}`);
       onModified();
@@ -443,6 +397,9 @@ function ModifyContextForm({
       />
 
       <Form.Dropdown id="cluster" title="Cluster" defaultValue={context.cluster}>
+        {context.cluster && !clusters.some((c) => c.name === context.cluster) && (
+          <Form.Dropdown.Item value={context.cluster} title={`${context.cluster} (missing from kubeconfig)`} />
+        )}
         {clusters.map((cluster) => (
           <Form.Dropdown.Item
             key={cluster.name}
@@ -453,6 +410,9 @@ function ModifyContextForm({
       </Form.Dropdown>
 
       <Form.Dropdown id="user" title="User" defaultValue={context.user}>
+        {context.user && !users.some((u) => u.name === context.user) && (
+          <Form.Dropdown.Item value={context.user} title={`${context.user} (missing from kubeconfig)`} />
+        )}
         {users.map((user) => (
           <Form.Dropdown.Item
             key={user.name}
