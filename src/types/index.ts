@@ -23,14 +23,6 @@ export interface KubernetesContext {
   cloudProvider?: CloudProvider;
 }
 
-export interface ContextListItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  accessories: Array<{ text: string; tooltip?: string }>;
-  context: KubernetesContext;
-}
-
 // Error handling
 export class ContextNotFoundError extends Error {
   constructor(contextName: string) {

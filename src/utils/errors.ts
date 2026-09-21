@@ -138,36 +138,3 @@ export async function showSuccessToast(title: string, message?: string): Promise
     message,
   });
 }
-
-/**
- * Shows an informational toast
- */
-export async function showInfoToast(title: string, message?: string): Promise<void> {
-  await showToast({
-    style: Toast.Style.Animated,
-    title,
-    message,
-  });
-}
-
-/**
- * Shows a warning toast with actionable guidance
- */
-export async function showWarningToast(title: string, message: string, action?: string): Promise<void> {
-  await showToast({
-    style: Toast.Style.Failure,
-    title: title,
-    message: action ? `${message}\n${action}` : message,
-  });
-}
-
-/**
- * Shows a loading toast that can be updated
- */
-export async function showLoadingToast(title: string, message?: string): Promise<Toast> {
-  return await showToast({
-    style: Toast.Style.Animated,
-    title,
-    message,
-  });
-}

@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, showToast, Toast } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, showToast, Toast, Keyboard } from "@raycast/api";
 import { useMemo, useState } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { switchAndClose } from "./utils/switch";
@@ -82,7 +82,7 @@ export default function ListContexts() {
           <Action
             title={pinnedNames.has(context.name) ? "Unpin Context" : "Pin Context"}
             icon={pinnedNames.has(context.name) ? Icon.PinDisabled : Icon.Pin}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+            shortcut={Keyboard.Shortcut.Common.Pin}
             onAction={() =>
               toggle(
                 context.name,

@@ -13,7 +13,7 @@ export function ContextActions({ context }: { context: KubernetesContext }) {
         <Action.CopyToClipboard
           title="Copy Context Name"
           content={context.name}
-          shortcut={Keyboard.Shortcut.Common.Copy}
+          shortcut={Keyboard.Shortcut.Common.CopyName}
         />
         {server && (
           <Action.CopyToClipboard

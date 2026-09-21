@@ -39,7 +39,7 @@ Writes to the kubeconfig (`src/utils/kubeconfig-io.ts`):
 | Cmd+Shift+Enter | Switch Context with Namespace | Quick switch without choosing a namespace |
 | Cmd+Shift+P | Kube Contexts, Switch Context with Namespace | Pin or unpin |
 | Cmd+1 to Cmd+5 | Current Context | Switch to the listed context |
-| Cmd+Shift+C | Context actions | Copy context name |
+| Cmd+Shift+. | Context actions | Copy context name (Raycast common shortcut) |
 | Cmd+Opt+S | Context actions | Copy server URL |
 | Cmd+Opt+K | Context actions | Copy kubectl command |
 | Cmd+R | Current Context, Manage Contexts, and the empty/error views of the lists | Refresh |

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { List, ActionPanel, Action, useNavigation, Icon } from "@raycast/api";
+import { List, ActionPanel, Action, useNavigation, Icon, Keyboard } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
 import { switchAndClose } from "./utils/switch";
@@ -86,7 +86,7 @@ export default function SwitchContextWithNamespace() {
           <Action
             title={pinnedNames.has(context.name) ? "Unpin Context" : "Pin Context"}
             icon={pinnedNames.has(context.name) ? Icon.PinDisabled : Icon.Pin}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+            shortcut={Keyboard.Shortcut.Common.Pin}
             onAction={() =>
               toggle(
                 context.name,

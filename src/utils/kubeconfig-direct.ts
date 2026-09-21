@@ -252,30 +252,6 @@ export function isKubeconfigAvailable(): boolean {
   }
 }
 
-/**
- * Get kubeconfig file information
- */
-export function getKubeconfigInfo() {
-  const kubeconfigPath = getKubeconfigPath();
-  const available = isKubeconfigAvailable();
-
-  let contextCount = 0;
-  let currentContext = null;
-
-  if (available) {
-    const contexts = getAllContexts();
-    contextCount = contexts.length;
-    currentContext = getCurrentContext();
-  }
-
-  return {
-    path: kubeconfigPath,
-    available,
-    contextCount,
-    currentContext,
-  };
-}
-
 export interface CreateContextOptions {
   /** Skip TLS verification for a newly created cluster. Off by default. */
   insecureSkipTlsVerify?: boolean;

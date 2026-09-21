@@ -19,6 +19,9 @@
     "k8s"
   ],
   "license": "MIT",
+  "platforms": [
+    "macOS"
+  ],
   "preferences": [
     {
       "name": "kubeconfigPath",

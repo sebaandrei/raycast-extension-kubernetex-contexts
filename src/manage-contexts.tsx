@@ -278,7 +278,7 @@ function CreateContextForm({
 
       {useExistingCluster ? (
         <Form.Dropdown id="cluster" title="Cluster" error={clusterError} onChange={() => setClusterError(undefined)}>
-          <Form.Dropdown.Item value="" title="Select a cluster..." />
+          <Form.Dropdown.Item value="" title="Select a cluster…" />
           {clusters.map((cluster) => (
             <Form.Dropdown.Item
               key={cluster.name}
@@ -323,7 +323,7 @@ function CreateContextForm({
 
       {useExistingUser ? (
         <Form.Dropdown id="user" title="User" error={userError} onChange={() => setUserError(undefined)}>
-          <Form.Dropdown.Item value="" title="Select a user..." />
+          <Form.Dropdown.Item value="" title="Select a user…" />
           {users.map((user) => (
             <Form.Dropdown.Item
               key={user.name}

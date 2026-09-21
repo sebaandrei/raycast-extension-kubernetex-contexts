@@ -41,7 +41,7 @@ export function NamespaceSelector({ contextName, namespaces, currentNamespace, o
       isLoading={isLoading}
       filtering
       navigationTitle={`Namespace for ${contextName}`}
-      searchBarPlaceholder="Search or type a namespace..."
+      searchBarPlaceholder="Search or type a namespace…"
       onSearchTextChange={setSearchText}
     >
       {typed !== "" && !isKnown && (
