@@ -63,4 +63,11 @@ describe("recent namespaces", () => {
     await expect(getRecentNamespaces("a")).resolves.toEqual([]);
     await expect(rememberNamespace("a", "x")).resolves.toBeUndefined();
   });
+
+  it("drops invalid, duplicate and excess entries from stored data", async () => {
+    store = JSON.stringify({
+      a: ["ok-1", "Bad_Name", "ok-1", 42, "", "ok-2", "ok-3", "ok-4", "ok-5", "ok-6"],
+    });
+    expect(await getRecentNamespaces("a")).toEqual(["ok-1", "ok-2", "ok-3", "ok-4", "ok-5"]);
+  });
 });

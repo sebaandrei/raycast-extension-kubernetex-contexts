@@ -1,4 +1,5 @@
 import { LocalStorage } from "@raycast/api";
+import { validateNamespace } from "./namespace";
 
 const STORAGE_KEY = "recent-namespaces";
 export const MAX_RECENT_NAMESPACES = 5;
@@ -19,7 +20,10 @@ async function readMap(): Promise<RecentMap> {
 
 function entriesOf(map: RecentMap, contextName: string): string[] {
   const entries = Object.prototype.hasOwnProperty.call(map, contextName) ? map[contextName] : undefined;
-  return Array.isArray(entries) ? entries.filter((e): e is string => typeof e === "string") : [];
+  if (!Array.isArray(entries)) return [];
+  // Sanitize on read: storage may hold legacy or corrupt data
+  const valid = entries.filter((e): e is string => typeof e === "string" && validateNamespace(e) === undefined);
+  return [...new Set(valid)].slice(0, MAX_RECENT_NAMESPACES);
 }
 
 /** Recently used namespaces of a context, most recent first. Never throws. */
