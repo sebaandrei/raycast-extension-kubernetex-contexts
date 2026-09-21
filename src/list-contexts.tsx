@@ -1,134 +1,125 @@
-import { List, ActionPanel, Action, Icon, popToRoot, showToast, Toast } from "@raycast/api";
-import { showFailureToast } from "@raycast/utils";
-import { useState, useMemo } from "react";
+import { List, ActionPanel, Action, Icon, showToast, Toast, Keyboard } from "@raycast/api";
+import { useMemo, useState } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
-import { searchAndFilterContexts, addRecentContext, SearchFilters } from "./utils/search-filter";
+import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
+import { KubeconfigEmptyView } from "./components/KubeconfigEmptyView";
+import {
+  contextIcon,
+  contextKeywords,
+  contextSubtitle,
+  prodAccessory,
+  providerAccessory,
+  serverLabel,
+} from "./components/context-visuals";
+import { useProductionMatcher } from "./hooks/useProductionMatcher";
+import { usePinnedRecent } from "./hooks/usePinnedRecent";
+import { buildSections } from "./utils/context-sections";
+import { ContextActions } from "./components/ContextActions";
+import { KubernetesContext } from "./types";
 
 export default function ListContexts() {
-  const { contexts, isLoading, error, switchContext } = useKubeconfig();
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Apply search with advanced filtering
-  const searchResults = useMemo(() => {
-    const filters: SearchFilters = { query: searchQuery };
-    return searchAndFilterContexts(contexts, filters);
-  }, [contexts, searchQuery]);
-
+  const { contexts, currentContext, isLoading, error, refresh, switchContext } = useKubeconfig();
   const handleSwitchContext = async (contextName: string) => {
-    try {
-      const success = await switchContext(contextName);
-      if (success) {
-        addRecentContext(contextName);
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Context Switched",
-          message: `Switched to: ${contextName}`,
-        });
-        // Go back to Raycast main command list
-        await popToRoot();
-      } else {
-        await showFailureToast("Context switch failed", {
-          title: "Failed to switch context",
-          message: `Could not switch to context '${contextName}'`,
-        });
-      }
-    } catch (err) {
-      await showFailureToast(err as Error, {
-        title: "Failed to switch context",
-      });
-    }
+    await switchAndClose(() => switchContext(contextName), { contextName, fromContext: currentContext });
   };
 
-  if (error) {
-    return (
-      <List>
-        <List.Item title="Error Loading Contexts" subtitle={error.message} accessories={[{ text: "❌" }]} />
-      </List>
-    );
-  }
+  const isProd = useProductionMatcher();
+
+  const [searchText, setSearchText] = useState("");
+  const { pinned, recent, toggle } = usePinnedRecent();
+  const sections = useMemo(() => buildSections({ contexts, pinned, recent }), [contexts, pinned, recent]);
+  const pinnedNames = useMemo(() => new Set(pinned), [pinned]);
+
+  const renderItem = (context: KubernetesContext) => (
+    <List.Item
+      key={context.name}
+      icon={contextIcon(context, isProd(context.name))}
+      title={context.name}
+      subtitle={{ value: contextSubtitle(context), tooltip: serverLabel(context) }}
+      keywords={contextKeywords(context)}
+      accessories={[
+        ...prodAccessory(isProd(context.name)),
+        ...providerAccessory(context),
+        { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
+        { text: context.userAuthMethod || "Unknown", tooltip: "Authentication Method" },
+        ...(context.clusterDetails
+          ? [
+              {
+                text: context.clusterDetails.protocol,
+                tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
+              },
+            ]
+          : []),
+      ]}
+      actions={
+        <ActionPanel>
+          {!context.current && (
+            <Action
+              title={`Switch to ${context.name}`}
+              icon={Icon.ArrowRight}
+              onAction={() => handleSwitchContext(context.name)}
+            />
+          )}
+          {context.current && (
+            <Action
+              title="Current Context"
+              icon={Icon.CheckCircle}
+              onAction={() =>
+                showToast({
+                  style: Toast.Style.Success,
+                  title: "Current Context",
+                  message: `Already using ${context.name}`,
+                })
+              }
+            />
+          )}
+          <Action.Push
+            title={`View ${context.name} Details`}
+            icon={Icon.Info}
+            target={<ContextDetails context={context} onSwitch={handleSwitchContext} />}
+          />
+          <Action
+            title={pinnedNames.has(context.name) ? "Unpin Context" : "Pin Context"}
+            icon={pinnedNames.has(context.name) ? Icon.PinDisabled : Icon.Pin}
+            shortcut={Keyboard.Shortcut.Common.Pin}
+            onAction={() =>
+              toggle(
+                context.name,
+                contexts.map((ctx) => ctx.name)
+              )
+            }
+          />
+          <ContextActions context={context} />
+        </ActionPanel>
+      }
+    />
+  );
 
   return (
     <List
       isLoading={isLoading}
-      searchText={searchQuery}
-      onSearchTextChange={setSearchQuery}
-      searchBarPlaceholder="Search contexts by name, cluster, user, or namespace..."
+      filtering
+      onSearchTextChange={setSearchText}
+      searchBarPlaceholder="Search contexts by name, cluster, user, or namespace"
     >
-      {searchResults.map(({ context, relevanceScore, matchedFields }) => (
-        <List.Item
-          key={context.name}
-          icon={context.current ? Icon.CheckCircle : Icon.Circle}
-          title={context.name}
-          subtitle={`Cluster: ${context.cluster} • User: ${context.user}${context.clusterDetails ? ` • ${context.clusterDetails.hostname}:${context.clusterDetails.port}` : ""}`}
-          accessories={[
-            {
-              text: `ns: ${context.namespace || "default"}`,
-              tooltip: "Namespace",
-            },
-            {
-              text: context.userAuthMethod || "Unknown",
-              tooltip: "Authentication Method",
-            },
-            ...(context.clusterDetails
-              ? [
-                  {
-                    text: context.clusterDetails.protocol,
-                    tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
-                  },
-                ]
-              : []),
-            ...(searchQuery
-              ? [
-                  {
-                    text: `${relevanceScore.toFixed(0)}%`,
-                    tooltip: `Relevance (matched: ${matchedFields.join(", ")})`,
-                  },
-                ]
-              : []),
-            {
-              text: context.current ? "●" : "",
-              tooltip: context.current ? "Current context" : undefined,
-            },
-          ]}
-          actions={
-            <ActionPanel>
-              {!context.current && (
-                <Action
-                  title={`Switch to ${context.name}`}
-                  icon={Icon.ArrowRight}
-                  onAction={() => handleSwitchContext(context.name)}
-                />
-              )}
-              {context.current && (
-                <Action
-                  title="Current Context"
-                  icon={Icon.CheckCircle}
-                  onAction={() =>
-                    showToast({
-                      style: Toast.Style.Success,
-                      title: "Current Context",
-                      message: `Already using ${context.name}`,
-                    })
-                  }
-                />
-              )}
-              <Action.Push
-                title={`View ${context.name} Details`}
-                icon={Icon.Info}
-                target={<ContextDetails context={context} />}
-              />
-            </ActionPanel>
-          }
-        />
-      ))}
-      {searchResults.length === 0 && !isLoading && (
-        <List.Item
-          title="No Matching Contexts"
-          subtitle={searchQuery ? `No contexts match "${searchQuery}"` : "Check your ~/.kube/config file"}
-          accessories={[{ text: searchQuery ? "🔍" : "⚠️" }]}
-        />
-      )}
+      {[
+        { title: "Pinned", items: sections.pinned },
+        { title: "Recent", items: sections.recent },
+        { title: "All Contexts", items: sections.all },
+      ]
+        .filter((section) => section.items.length > 0)
+        .map((section) => (
+          <List.Section key={section.title} title={section.title}>
+            {section.items.map(renderItem)}
+          </List.Section>
+        ))}
+      <KubeconfigEmptyView
+        error={error}
+        hasContexts={contexts.length > 0}
+        searchText={searchText}
+        onRefresh={refresh}
+      />
     </List>
   );
 }

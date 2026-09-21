@@ -1,166 +1,33 @@
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-import { parse, stringify } from "yaml";
 import { KubernetesContext, ClusterDetails } from "../types";
-import { KubeconfigError, ValidationError } from "./errors";
+import { KubeconfigError, ValidationError } from "./kubeconfig-errors";
+import { KubeConfig, readKubeconfigFile, writeKubeconfigFile } from "./kubeconfig-io";
+import { resolveKubeconfigPath } from "./kubeconfig-path";
+import { validateNamespace } from "./namespace";
+import { getPreferences } from "./preferences";
+import { detectCloudProvider } from "./cloud-provider";
 
-// Default kubeconfig location
-const DEFAULT_KUBECONFIG = join(homedir(), ".kube", "config");
-
-interface KubeConfig {
-  "current-context"?: string;
-  contexts?: Array<{
-    name: string;
-    context: {
-      cluster: string;
-      user: string;
-      namespace?: string;
-    };
-  }>;
-  clusters?: Array<{
-    name: string;
-    cluster: {
-      server?: string;
-      "certificate-authority"?: string;
-      "certificate-authority-data"?: string;
-      "insecure-skip-tls-verify"?: boolean;
-      [key: string]: unknown;
-    };
-  }>;
-  users?: Array<{
-    name: string;
-    user: {
-      "client-certificate"?: string;
-      "client-certificate-data"?: string;
-      "client-key"?: string;
-      "client-key-data"?: string;
-      token?: string;
-      username?: string;
-      password?: string;
-      "auth-provider"?: Record<string, unknown>;
-      exec?: Record<string, unknown>;
-      [key: string]: unknown;
-    };
-  }>;
+/**
+ * Get the kubeconfig file path from preferences, the first `$KUBECONFIG` entry or the default
+ */
+export function getKubeconfigPath(): string {
+  return resolveKubeconfigPath(getPreferences().kubeconfigPath);
 }
 
 /**
- * Get the kubeconfig file path from environment or default
+ * Read and parse the kubeconfig file.
+ * Throws KubeconfigError for unreadable, empty or structurally invalid files.
  */
-function getKubeconfigPath(): string {
-  return process.env.KUBECONFIG || DEFAULT_KUBECONFIG;
+export function readKubeconfig(kubeconfigPath: string = getKubeconfigPath()): KubeConfig {
+  return readKubeconfigFile(kubeconfigPath);
 }
 
 /**
- * Read and parse the kubeconfig file with enhanced error handling
+ * Write kubeconfig back to file, preserving permissions. Comments are
+ * preserved only when `config` is the object returned by `readKubeconfig`
+ * (not a copy or a hand-built object).
  */
-export function readKubeconfig(): KubeConfig {
-  try {
-    const kubeconfigPath = getKubeconfigPath();
-
-    if (!existsSync(kubeconfigPath)) {
-      throw new KubeconfigError(
-        `Kubeconfig file not found at ${kubeconfigPath}`,
-        "Create a kubeconfig file or set KUBECONFIG environment variable"
-      );
-    }
-
-    const content = readFileSync(kubeconfigPath, "utf8");
-
-    if (!content.trim()) {
-      throw new KubeconfigError("Kubeconfig file is empty", "Add cluster configuration to your kubeconfig file");
-    }
-
-    const config = parse(content);
-    if (!config || typeof config !== "object") {
-      throw new KubeconfigError("Invalid kubeconfig format", "Check your kubeconfig syntax and structure");
-    }
-
-    return config;
-  } catch (error) {
-    if (error instanceof KubeconfigError) {
-      throw error;
-    }
-
-    if (error instanceof Error) {
-      if (error.message.includes("permission denied") || error.message.includes("EACCES")) {
-        throw new KubeconfigError(
-          "Permission denied accessing kubeconfig",
-          "Fix file permissions: chmod 600 ~/.kube/config"
-        );
-      }
-
-      if (error.message.includes("YAML")) {
-        throw new KubeconfigError(
-          "Invalid YAML syntax in kubeconfig",
-          "Check your kubeconfig syntax or regenerate the file"
-        );
-      }
-    }
-
-    console.error("Failed to read kubeconfig:", error);
-    throw new KubeconfigError("Failed to read kubeconfig file", "Check the file exists and is accessible");
-  }
-}
-
-/**
- * Write kubeconfig back to file with enhanced error handling
- */
-export function writeKubeconfig(config: KubeConfig): void {
-  try {
-    const kubeconfigPath = getKubeconfigPath();
-
-    // Validate config structure
-    if (!config || typeof config !== "object") {
-      throw new ValidationError("Invalid kubeconfig data", "Ensure the configuration object is valid");
-    }
-
-    const content = stringify(config);
-
-    if (!content.trim()) {
-      throw new KubeconfigError("Empty kubeconfig content", "Configuration data appears to be empty");
-    }
-
-    // Create backup of existing file
-    const backupPath = `${kubeconfigPath}.backup`;
-    if (existsSync(kubeconfigPath)) {
-      const existingContent = readFileSync(kubeconfigPath, "utf8");
-      writeFileSync(backupPath, existingContent, "utf8");
-    }
-
-    writeFileSync(kubeconfigPath, content, "utf8");
-
-    // Cleanup backup on successful write
-    if (existsSync(backupPath)) {
-      try {
-        unlinkSync(backupPath);
-      } catch (cleanupError) {
-        // Ignore cleanup errors
-        console.warn("Failed to cleanup backup file:", cleanupError);
-      }
-    }
-  } catch (error) {
-    if (error instanceof ValidationError || error instanceof KubeconfigError) {
-      throw error;
-    }
-
-    if (error instanceof Error) {
-      if (error.message.includes("permission denied") || error.message.includes("EACCES")) {
-        throw new KubeconfigError(
-          "Permission denied writing kubeconfig",
-          "Fix file permissions: chmod 600 ~/.kube/config"
-        );
-      }
-
-      if (error.message.includes("ENOSPC")) {
-        throw new KubeconfigError("No space left on device", "Free up disk space and try again");
-      }
-    }
-
-    console.error("Failed to write kubeconfig:", error);
-    throw new KubeconfigError("Failed to write kubeconfig file", "Check file permissions and disk space");
-  }
+export function writeKubeconfig(config: KubeConfig, kubeconfigPath: string = getKubeconfigPath()): void {
+  writeKubeconfigFile(config, kubeconfigPath);
 }
 
 /**
@@ -182,13 +49,14 @@ export function getClusterDetails(clusterName: string, config?: KubeConfig): Clu
     return null;
   }
 
-  const server = cluster.cluster.server || "";
-  const isSecure = !cluster.cluster["insecure-skip-tls-verify"];
-  const hasCA = !!(cluster.cluster["certificate-authority"] || cluster.cluster["certificate-authority-data"]);
+  // A malformed entry may lack its nested `cluster:` map
+  const body = cluster.cluster ?? {};
+  const server = body.server || "";
+  const hasCA = !!(body["certificate-authority"] || body["certificate-authority-data"]);
 
   let hostname = "Unknown";
   let port = "Unknown";
-  let protocol = "Unknown";
+  let protocol: ClusterDetails["protocol"] = "Unknown";
 
   if (server) {
     try {
@@ -203,6 +71,9 @@ export function getClusterDetails(clusterName: string, config?: KubeConfig): Clu
       hostname = match ? match[1] : "Unknown";
     }
   }
+
+  // Secure means HTTPS with certificate verification on
+  const isSecure = protocol === "HTTPS" && !body["insecure-skip-tls-verify"];
 
   return {
     name: clusterName,
@@ -226,9 +97,10 @@ export function getUserAuthMethod(userName: string, config?: KubeConfig) {
     return "Unknown";
   }
 
-  const userConfig = user.user;
+  const userConfig = user.user ?? {}; // may be missing in a malformed entry
 
   if (userConfig.token) return "Token";
+  if (userConfig.tokenFile) return "Token File";
   if (userConfig["client-certificate"] || userConfig["client-certificate-data"]) return "Client Certificate";
   if (userConfig.username && userConfig.password) return "Basic Auth";
   if (userConfig["auth-provider"]) return `Auth Provider (${userConfig["auth-provider"].name || "Unknown"})`;
@@ -240,99 +112,112 @@ export function getUserAuthMethod(userName: string, config?: KubeConfig) {
 /**
  * Get all contexts from kubeconfig
  */
-export function getAllContexts(): KubernetesContext[] {
-  const config = readKubeconfig();
+export function getAllContexts(config: KubeConfig = readKubeconfig()): KubernetesContext[] {
   const currentContext = config["current-context"];
 
   if (!config.contexts) {
     return [];
   }
 
-  return config.contexts.map((ctx) => ({
-    name: ctx.name,
-    cluster: ctx.context.cluster,
-    user: ctx.context.user,
-    namespace: ctx.context.namespace,
-    current: ctx.name === currentContext,
-    clusterDetails: getClusterDetails(ctx.context.cluster, config),
-    userAuthMethod: getUserAuthMethod(ctx.context.user, config),
-  }));
+  return config.contexts.map((ctx) => {
+    const { cluster = "", user = "", namespace } = ctx.context ?? {};
+    const clusterDetails = getClusterDetails(cluster, config) ?? undefined;
+    const exec = config.users?.find((u) => u.name === user)?.user?.exec;
+    const cloudProvider = detectCloudProvider({
+      execCommand: typeof exec?.command === "string" ? exec.command : undefined,
+      execArgs: Array.isArray(exec?.args) ? exec.args.filter((a): a is string => typeof a === "string") : undefined,
+      server: clusterDetails?.server,
+    });
+    return {
+      name: ctx.name,
+      cluster,
+      user,
+      namespace,
+      current: ctx.name === currentContext,
+      clusterDetails,
+      userAuthMethod: getUserAuthMethod(user, config),
+      cloudProvider,
+    };
+  });
+}
+
+/**
+ * Read the kubeconfig, apply `mutate`, and write it back
+ */
+function updateConfig<T>(mutate: (config: KubeConfig) => T): T {
+  const config = readKubeconfig();
+  const result = mutate(config);
+  writeKubeconfig(config);
+  return result;
+}
+
+function requireContext(config: KubeConfig, contextName: string) {
+  const context = config.contexts?.find((ctx) => ctx.name === contextName);
+  if (!context) {
+    throw new KubeconfigError(
+      `Context "${contextName}" not found`,
+      "Refresh the list; the kubeconfig may have changed"
+    );
+  }
+  return context;
+}
+
+type ContextEntry = NonNullable<KubeConfig["contexts"]>[number];
+
+/** Set the namespace, creating the nested `context:` map of a malformed entry only now */
+function setNamespace(entry: ContextEntry, namespace: string): void {
+  entry.context ??= { cluster: "", user: "" };
+  entry.context.namespace = namespace;
 }
 
 /**
  * Switch to a different context
  */
-export function switchToContext(contextName: string): boolean {
-  try {
-    const config = readKubeconfig();
-
-    // Verify the context exists
-    const contextExists = config.contexts?.some((ctx) => ctx.name === contextName);
-    if (!contextExists) {
-      throw new Error(`Context "${contextName}" not found`);
-    }
-
-    // Update current context
+export function switchToContext(contextName: string): void {
+  updateConfig((config) => {
+    requireContext(config, contextName);
     config["current-context"] = contextName;
+  });
+}
 
-    // Write back to file
-    writeKubeconfig(config);
-
-    return true;
-  } catch (error) {
-    console.error("Failed to switch context:", error);
-    return false;
+function assertValidNamespace(namespace: string): void {
+  const problem = validateNamespace(namespace);
+  if (problem) {
+    throw new ValidationError(
+      `Invalid namespace "${namespace}": ${problem}`,
+      "Enter a valid Kubernetes namespace name"
+    );
   }
 }
 
 /**
  * Set namespace for a context
  */
-export function setContextNamespace(contextName: string, namespace: string): boolean {
-  try {
-    const config = readKubeconfig();
-
-    if (!config.contexts) {
-      throw new Error("No contexts found in kubeconfig");
-    }
-
-    const contextIndex = config.contexts.findIndex((ctx) => ctx.name === contextName);
-    if (contextIndex === -1) {
-      throw new Error(`Context "${contextName}" not found`);
-    }
-
-    // Update namespace
-    config.contexts[contextIndex].context.namespace = namespace;
-
-    // Write back to file
-    writeKubeconfig(config);
-
-    return true;
-  } catch (error) {
-    console.error("Failed to set context namespace:", error);
-    return false;
-  }
+export function setContextNamespace(contextName: string, namespace: string): void {
+  assertValidNamespace(namespace);
+  updateConfig((config) => {
+    setNamespace(requireContext(config, contextName), namespace);
+  });
 }
 
 /**
- * Get available namespaces (common ones + context-specific ones)
+ * The namespaces every cluster has: default, kube-system, kube-public, kube-node-lease.
  */
 export function getCommonNamespaces(): string[] {
-  // Common Kubernetes namespaces
   return ["default", "kube-system", "kube-public", "kube-node-lease"];
 }
 
 /**
  * Get all unique namespaces from existing contexts
  */
-export function getNamespacesFromContexts(): string[] {
-  const config = readKubeconfig();
+export function getNamespacesFromContexts(config: KubeConfig = readKubeconfig()): string[] {
   const namespaces = new Set<string>();
 
   if (config.contexts) {
     config.contexts.forEach((ctx) => {
-      if (ctx.context.namespace) {
-        namespaces.add(ctx.context.namespace);
+      const namespace = ctx.context?.namespace;
+      if (namespace) {
+        namespaces.add(namespace);
       }
     });
   }
@@ -346,9 +231,9 @@ export function getNamespacesFromContexts(): string[] {
 /**
  * Get all available namespaces (common + from contexts)
  */
-export function getAllAvailableNamespaces(): string[] {
+export function getAllAvailableNamespaces(config: KubeConfig = readKubeconfig()): string[] {
   const common = getCommonNamespaces();
-  const fromContexts = getNamespacesFromContexts();
+  const fromContexts = getNamespacesFromContexts(config);
 
   // Combine and deduplicate
   const all = new Set([...common, ...fromContexts]);
@@ -358,189 +243,147 @@ export function getAllAvailableNamespaces(): string[] {
 /**
  * Switch context and optionally set namespace
  */
-export function switchToContextWithNamespace(contextName: string, namespace?: string): boolean {
-  try {
-    const config = readKubeconfig();
-
-    // Verify the context exists
-    const contextExists = config.contexts?.some((ctx) => ctx.name === contextName);
-    if (!contextExists) {
-      throw new Error(`Context "${contextName}" not found`);
-    }
-
-    // If namespace is provided, set it for the context first
+export function switchToContextWithNamespace(contextName: string, namespace?: string): void {
+  if (namespace) assertValidNamespace(namespace);
+  updateConfig((config) => {
+    const context = requireContext(config, contextName);
     if (namespace) {
-      const contextIndex = config.contexts!.findIndex((ctx) => ctx.name === contextName);
-      if (contextIndex !== -1) {
-        config.contexts![contextIndex].context.namespace = namespace;
-      }
+      setNamespace(context, namespace);
     }
-
-    // Update current context
     config["current-context"] = contextName;
-
-    // Write back to file
-    writeKubeconfig(config);
-
-    return true;
-  } catch (error) {
-    console.error("Failed to switch context with namespace:", error);
-    return false;
-  }
+  });
 }
 
-/**
- * Check if kubeconfig file exists and is readable
- */
-export function isKubeconfigAvailable(): boolean {
+export interface CreateContextOptions {
+  /** Skip TLS verification for a newly created cluster. Off by default. */
+  insecureSkipTlsVerify?: boolean;
+}
+
+function requireServerUrl(server: string | undefined): string {
+  const value = server?.trim();
+  if (!value) {
+    throw new ValidationError(
+      "Server URL is required for a new cluster",
+      "Enter the API server URL, e.g. https://my-cluster.example.com:6443"
+    );
+  }
+
+  let url: URL;
   try {
-    const kubeconfigPath = getKubeconfigPath();
-    readFileSync(kubeconfigPath, "utf8");
-    return true;
+    url = new URL(value);
   } catch {
-    return false;
+    throw new ValidationError(
+      `"${value}" is not a valid URL`,
+      "Use a full URL such as https://my-cluster.example.com:6443"
+    );
   }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new ValidationError(`Unsupported protocol "${url.protocol}"`, "Use an http:// or https:// URL");
+  }
+  return value;
 }
 
 /**
- * Get kubeconfig file information
- */
-export function getKubeconfigInfo() {
-  const kubeconfigPath = getKubeconfigPath();
-  const available = isKubeconfigAvailable();
-
-  let contextCount = 0;
-  let currentContext = null;
-
-  if (available) {
-    const contexts = getAllContexts();
-    contextCount = contexts.length;
-    currentContext = getCurrentContext();
-  }
-
-  return {
-    path: kubeconfigPath,
-    available,
-    contextCount,
-    currentContext,
-  };
-}
-
-/**
- * Create a new context
+ * Create a new context. A missing cluster is created (server URL required);
+ * a missing user is created as an empty placeholder.
  */
 export function createContext(
   name: string,
   clusterName: string,
   userName: string,
   namespace?: string,
-  clusterServer?: string
-): boolean {
-  try {
-    const config = readKubeconfig();
+  clusterServer?: string,
+  options: CreateContextOptions = {}
+): void {
+  if (!name.trim() || !clusterName.trim() || !userName.trim()) {
+    throw new ValidationError("Context, cluster and user names are required", "Fill in all required fields");
+  }
+  if (namespace) assertValidNamespace(namespace);
 
-    // Check if context already exists
-    const existingContext = config.contexts?.find((ctx) => ctx.name === name);
-    if (existingContext) {
-      throw new Error(`Context "${name}" already exists`);
-    }
-
-    // Ensure arrays exist
-    if (!config.contexts) {
-      config.contexts = [];
-    }
-    if (!config.clusters) {
-      config.clusters = [];
-    }
-    if (!config.users) {
-      config.users = [];
+  updateConfig((config) => {
+    if (config.contexts?.some((ctx) => ctx.name === name)) {
+      throw new ValidationError(
+        `Context "${name}" already exists`,
+        "Choose a different name or modify the existing one"
+      );
     }
 
-    // Check if cluster exists, if not create a basic one
-    const existingCluster = config.clusters.find((c) => c.name === clusterName);
-    if (!existingCluster) {
-      const newCluster = {
+    config.contexts ??= [];
+    config.clusters ??= [];
+    config.users ??= [];
+
+    if (!config.clusters.some((c) => c.name === clusterName)) {
+      config.clusters.push({
         name: clusterName,
         cluster: {
-          ...(clusterServer && { server: clusterServer }),
-          // Add basic cluster configuration
-          "insecure-skip-tls-verify": true,
+          server: requireServerUrl(clusterServer),
+          ...(options.insecureSkipTlsVerify && { "insecure-skip-tls-verify": true }),
         },
-      };
-      config.clusters.push(newCluster);
+      });
     }
 
-    // Check if user exists, if not create a basic one
-    const existingUser = config.users.find((u) => u.name === userName);
-    if (!existingUser) {
-      const newUser = {
-        name: userName,
-        user: {
-          // Create a placeholder user - actual auth config would need to be added separately
-        },
-      };
-      config.users.push(newUser);
+    if (!config.users.some((u) => u.name === userName)) {
+      // Placeholder without credentials; authentication must be added separately
+      config.users.push({ name: userName, user: {} });
     }
 
-    // Add the new context
-    const newContext = {
+    config.contexts.push({
       name,
-      context: {
-        cluster: clusterName,
-        user: userName,
-        ...(namespace && { namespace }),
-      },
-    };
+      context: { cluster: clusterName, user: userName, ...(namespace && { namespace }) },
+    });
+  });
+}
 
-    config.contexts.push(newContext);
-
-    // Write back to file
-    writeKubeconfig(config);
-
-    return true;
-  } catch (error) {
-    console.error("Failed to create context:", error);
-    throw error;
-  }
+export interface DeleteContextResult {
+  removedCluster?: string;
+  removedUser?: string;
 }
 
 /**
- * Delete an existing context
+ * Delete a context. With `removeUnused`, also remove its cluster and user
+ * when no other context references them.
  */
-export function deleteContext(contextName: string): boolean {
-  try {
-    const config = readKubeconfig();
+export function deleteContext(contextName: string, options: { removeUnused?: boolean } = {}): DeleteContextResult {
+  return updateConfig((config) => {
+    const context = requireContext(config, contextName);
 
-    if (!config.contexts) {
-      throw new Error("No contexts found in kubeconfig");
-    }
-
-    // Find the context
-    const contextIndex = config.contexts.findIndex((ctx) => ctx.name === contextName);
-    if (contextIndex === -1) {
-      throw new Error(`Context "${contextName}" not found`);
-    }
-
-    // Don't delete if it's the current context
     if (config["current-context"] === contextName) {
-      throw new Error(`Cannot delete current context "${contextName}". Switch to another context first.`);
+      throw new ValidationError(
+        `Cannot delete the current context "${contextName}"`,
+        "Switch to another context first"
+      );
     }
 
-    // Remove the context
-    config.contexts.splice(contextIndex, 1);
+    const contexts = config.contexts ?? [];
+    contexts.splice(contexts.indexOf(context), 1);
 
-    // Write back to file
-    writeKubeconfig(config);
+    const result: DeleteContextResult = {};
+    if (options.removeUnused) {
+      const { cluster, user } = context.context ?? {};
 
-    return true;
-  } catch (error) {
-    console.error("Failed to delete context:", error);
-    throw error;
-  }
+      if (
+        cluster !== undefined &&
+        !contexts.some((ctx) => ctx.context?.cluster === cluster) &&
+        config.clusters?.some((c) => c.name === cluster)
+      ) {
+        config.clusters = config.clusters.filter((c) => c.name !== cluster);
+        result.removedCluster = cluster;
+      }
+      if (
+        user !== undefined &&
+        !contexts.some((ctx) => ctx.context?.user === user) &&
+        config.users?.some((u) => u.name === user)
+      ) {
+        config.users = config.users.filter((u) => u.name !== user);
+        result.removedUser = user;
+      }
+    }
+    return result;
+  });
 }
 
 /**
- * Modify an existing context
+ * Modify an existing context. Cluster and user must already exist.
  */
 export function modifyContext(
   contextName: string,
@@ -550,88 +393,70 @@ export function modifyContext(
     user?: string;
     namespace?: string;
   }
-): boolean {
-  try {
-    const config = readKubeconfig();
+): void {
+  if (updates.namespace) assertValidNamespace(updates.namespace);
 
-    if (!config.contexts) {
-      throw new Error("No contexts found in kubeconfig");
+  updateConfig((config) => {
+    const context = requireContext(config, contextName);
+
+    const newName = updates.newName?.trim();
+    if (updates.newName !== undefined && !newName) {
+      throw new ValidationError("Context name cannot be empty", "Enter a name for the context");
     }
-
-    // Find the context
-    const contextIndex = config.contexts.findIndex((ctx) => ctx.name === contextName);
-    if (contextIndex === -1) {
-      throw new Error(`Context "${contextName}" not found`);
-    }
-
-    const context = config.contexts[contextIndex];
-
-    // Check if new name conflicts with existing contexts
-    if (updates.newName && updates.newName !== contextName) {
-      const existingContext = config.contexts.find((ctx) => ctx.name === updates.newName);
-      if (existingContext) {
-        throw new Error(`Context name "${updates.newName}" already exists`);
+    if (newName && newName !== contextName) {
+      if (config.contexts?.some((ctx) => ctx.name === newName)) {
+        throw new ValidationError(`Context name "${newName}" already exists`, "Choose a different name");
       }
-
-      // Update current-context reference if this context is current
       if (config["current-context"] === contextName) {
-        config["current-context"] = updates.newName;
+        config["current-context"] = newName;
       }
-
-      // Update the name
-      context.name = updates.newName;
+      context.name = newName;
     }
 
-    // Update context properties
     if (updates.cluster !== undefined) {
+      if (!config.clusters?.some((c) => c.name === updates.cluster)) {
+        throw new ValidationError(`Cluster "${updates.cluster}" does not exist`, "Choose an existing cluster");
+      }
+      context.context ??= { cluster: updates.cluster, user: "" };
       context.context.cluster = updates.cluster;
     }
 
     if (updates.user !== undefined) {
+      if (!config.users?.some((u) => u.name === updates.user)) {
+        throw new ValidationError(`User "${updates.user}" does not exist`, "Choose an existing user");
+      }
+      context.context ??= { cluster: "", user: updates.user };
       context.context.user = updates.user;
     }
 
     if (updates.namespace !== undefined) {
       if (updates.namespace === "") {
-        // Remove namespace if empty string is provided
-        delete context.context.namespace;
+        if (context.context) delete context.context.namespace;
       } else {
-        context.context.namespace = updates.namespace;
+        setNamespace(context, updates.namespace);
       }
     }
-
-    // Write back to file
-    writeKubeconfig(config);
-
-    return true;
-  } catch (error) {
-    console.error("Failed to modify context:", error);
-    throw error;
-  }
+  });
 }
 
 /**
  * Get all available clusters from kubeconfig
  */
-export function getAllClusters(): Array<{ name: string; server?: string }> {
-  const config = readKubeconfig();
-
+export function getAllClusters(config: KubeConfig = readKubeconfig()): Array<{ name: string; server?: string }> {
   if (!config.clusters) {
     return [];
   }
 
   return config.clusters.map((cluster) => ({
     name: cluster.name,
-    server: cluster.cluster.server,
+    server: cluster.cluster?.server,
   }));
 }
 
 /**
  * Get all available users from kubeconfig
  */
-export function getAllUsers(): Array<{ name: string; authMethod?: string }> {
-  const config = readKubeconfig();
-
+export function getAllUsers(config: KubeConfig = readKubeconfig()): Array<{ name: string; authMethod?: string }> {
   if (!config.users) {
     return [];
   }
@@ -640,4 +465,31 @@ export function getAllUsers(): Array<{ name: string; authMethod?: string }> {
     name: user.name,
     authMethod: getUserAuthMethod(user.name, config),
   }));
+}
+
+export interface KubeconfigState {
+  readonly path: string;
+  readonly contexts: KubernetesContext[];
+  readonly currentContext: string | null;
+  readonly namespaces: string[];
+  readonly clusters: Array<{ name: string; server?: string }>;
+  readonly users: Array<{ name: string; authMethod?: string }>;
+}
+
+/**
+ * Read the kubeconfig once and derive everything the commands need from it.
+ * The result is plain data so it can be cached.
+ * Throws KubeconfigError for unreadable, empty or invalid files.
+ */
+export function loadKubeconfigState(path: string = getKubeconfigPath()): KubeconfigState {
+  const config = readKubeconfig(path);
+
+  return {
+    path,
+    contexts: getAllContexts(config),
+    currentContext: config["current-context"] || null,
+    namespaces: getAllAvailableNamespaces(config),
+    clusters: getAllClusters(config),
+    users: getAllUsers(config),
+  };
 }

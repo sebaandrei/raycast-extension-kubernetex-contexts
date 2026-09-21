@@ -1,6 +1,7 @@
-import { Detail, ActionPanel, Action, popToRoot, Keyboard, showToast, Toast } from "@raycast/api";
-import { showFailureToast } from "@raycast/utils";
+import { Detail, ActionPanel, Action, Keyboard } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
+import { escapeMarkdown } from "./utils/markdown";
+import { switchAndClose } from "./utils/switch";
 
 export default function CurrentContext() {
   const { contexts, currentContext, kubeconfigInfo, isLoading, error, refresh, switchContext } = useKubeconfig();
@@ -8,14 +9,17 @@ export default function CurrentContext() {
   const currentCtx = contexts.find((ctx) => ctx.current);
 
   const generateMarkdown = () => {
+    // Avoid flashing the "No Current Context" body before the first read completes
+    if (isLoading && !currentContext && !error) return "";
+
     if (error) {
       return `
 # Current Context - Error
 
-❌ **Error loading kubeconfig**
+**Error loading kubeconfig**
 
 \`\`\`
-${error.message}
+${error.message.replace(/`/g, "'")}
 \`\`\`
 
 ## Troubleshooting
@@ -29,15 +33,15 @@ ${error.message}
       return `
 # No Current Context
 
-⚠️ **No current context is set**
+**No current context is set**
 
 ## Kubeconfig Information
-- **File**: ${kubeconfigInfo.path}
-- **Available**: ${kubeconfigInfo.available ? "✅ Yes" : "❌ No"}
+- **File**: ${escapeMarkdown(kubeconfigInfo.path)}
+- **Available**: ${kubeconfigInfo.available ? "Yes" : "No"}
 - **Total Contexts**: ${kubeconfigInfo.contextCount}
 
 ## Available Contexts
-${contexts.length > 0 ? contexts.map((ctx) => `- ${ctx.name} (${ctx.cluster})`).join("\n") : "No contexts found"}
+${contexts.length > 0 ? contexts.map((ctx) => `- ${escapeMarkdown(ctx.name)} (${escapeMarkdown(ctx.cluster)})`).join("\n") : "No contexts found"}
 
 *Use the "Kube Contexts" command to switch between contexts*
       `;
@@ -46,34 +50,34 @@ ${contexts.length > 0 ? contexts.map((ctx) => `- ${ctx.name} (${ctx.cluster})`).
     return `
 # Current Context
 
-## ✅ Active Context: **${currentContext}**
+## Active Context: **${escapeMarkdown(currentContext)}**
 
 ${
   currentCtx
     ? `
 ## Context Details
-- **Name**: ${currentCtx.name}
-- **Cluster**: ${currentCtx.cluster}
-- **User**: ${currentCtx.user}
-- **Namespace**: ${currentCtx.namespace || "default"}
-- **Authentication**: ${currentCtx.userAuthMethod || "Unknown"}
+- **Name**: ${escapeMarkdown(currentCtx.name)}
+- **Cluster**: ${escapeMarkdown(currentCtx.cluster)}
+- **User**: ${escapeMarkdown(currentCtx.user)}
+- **Namespace**: ${escapeMarkdown(currentCtx.namespace || "default")}
+- **Authentication**: ${escapeMarkdown(currentCtx.userAuthMethod || "Unknown")}
 
 ## Cluster Information
 ${
   currentCtx.clusterDetails
     ? `
-- **Server**: ${currentCtx.clusterDetails.server}
-- **Hostname**: ${currentCtx.clusterDetails.hostname}
-- **Port**: ${currentCtx.clusterDetails.port}
-- **Protocol**: ${currentCtx.clusterDetails.protocol}
-- **Security**: ${currentCtx.clusterDetails.isSecure ? "🔒 Secure" : "⚠️ Insecure"}
-- **CA Certificate**: ${currentCtx.clusterDetails.hasCA ? "✅ Present" : "❌ Missing"}
+- **Server**: ${escapeMarkdown(currentCtx.clusterDetails.server)}
+- **Hostname**: ${escapeMarkdown(currentCtx.clusterDetails.hostname)}
+- **Port**: ${escapeMarkdown(currentCtx.clusterDetails.port)}
+- **Protocol**: ${escapeMarkdown(currentCtx.clusterDetails.protocol)}
+- **Security**: ${currentCtx.clusterDetails.isSecure ? "Secure" : "Insecure"}
+- **CA Certificate**: ${currentCtx.clusterDetails.hasCA ? "Present" : "Missing"}
 `
     : "- **Server**: Unknown"
 }
 
 ## File Information
-- **Context File**: ${kubeconfigInfo.path}
+- **Context File**: ${escapeMarkdown(kubeconfigInfo.path)}
 - **Total Contexts Available**: ${kubeconfigInfo.contextCount}
 `
     : ""
@@ -86,24 +90,8 @@ Use the actions below to manage your contexts quickly.
 
   const otherContexts = contexts.filter((ctx) => !ctx.current).slice(0, 5);
 
-  const handleSwitchContext = async (contextName: string) => {
-    try {
-      const success = await switchContext(contextName);
-      if (success) {
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Context Switched",
-          message: `Switched to: ${contextName}`,
-        });
-        // Go back to Raycast main command list
-        await popToRoot();
-      }
-    } catch (err) {
-      await showFailureToast(err as Error, {
-        title: "Failed to switch context",
-      });
-    }
-  };
+  const handleSwitchContext = (contextName: string) =>
+    switchAndClose(() => switchContext(contextName), { contextName, fromContext: currentContext });
 
   return (
     <Detail
@@ -113,7 +101,6 @@ Use the actions below to manage your contexts quickly.
         <ActionPanel>
           <Action title="Refresh" onAction={refresh} shortcut={Keyboard.Shortcut.Common.Refresh} />
           {otherContexts.map((ctx, index) => {
-            // Map index to valid KeyEquivalent values
             const keyMap = ["1", "2", "3", "4", "5"] as const;
 
             return (
@@ -121,12 +108,7 @@ Use the actions below to manage your contexts quickly.
                 key={ctx.name}
                 title={`Switch to ${ctx.name}`}
                 onAction={() => handleSwitchContext(ctx.name)}
-                {...(index < 5 && {
-                  shortcut: {
-                    modifiers: ["cmd"] as const,
-                    key: keyMap[index],
-                  },
-                })}
+                shortcut={{ modifiers: ["cmd"], key: keyMap[index] }}
               />
             );
           })}

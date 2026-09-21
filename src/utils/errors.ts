@@ -1,10 +1,13 @@
 import { showToast, Toast } from "@raycast/api";
+import { KubeconfigError, ValidationError } from "./kubeconfig-errors";
+
+export { KubeconfigError, ValidationError };
 
 /**
  * Enhanced error types for better user guidance
  */
 export interface KubeError {
-  type: "kubeconfig" | "context" | "permission" | "file" | "yaml" | "network" | "validation" | "unknown";
+  type: "kubeconfig" | "context" | "permission" | "file" | "yaml" | "validation" | "unknown";
   title: string;
   message: string;
   action?: string;
@@ -13,37 +16,8 @@ export interface KubeError {
 /**
  * Analyzes error and returns structured error information
  */
-function analyzeError(error: Error): KubeError {
+export function analyzeError(error: Error): KubeError {
   const errorMsg = error.message.toLowerCase();
-
-  // File system errors
-  if (errorMsg.includes("enoent") || errorMsg.includes("not found")) {
-    return {
-      type: "file",
-      title: "Kubeconfig Not Found",
-      message: "No kubeconfig file found at ~/.kube/config",
-      action: "Create a kubeconfig file or check your Kubernetes setup",
-    };
-  }
-
-  if (errorMsg.includes("eacces") || errorMsg.includes("permission denied")) {
-    return {
-      type: "permission",
-      title: "Permission Denied",
-      message: "Cannot access ~/.kube/config",
-      action: "Fix file permissions: chmod 600 ~/.kube/config",
-    };
-  }
-
-  // YAML parsing errors
-  if (errorMsg.includes("yaml") || errorMsg.includes("parse") || errorMsg.includes("syntax")) {
-    return {
-      type: "yaml",
-      title: "Invalid Kubeconfig",
-      message: "Kubeconfig file contains invalid YAML",
-      action: "Check your kubeconfig syntax or regenerate the file",
-    };
-  }
 
   // Context-specific errors
   if (errorMsg.includes("context") && (errorMsg.includes("not found") || errorMsg.includes("does not exist"))) {
@@ -64,13 +38,32 @@ function analyzeError(error: Error): KubeError {
     };
   }
 
-  // Network/cluster errors
-  if (errorMsg.includes("timeout") || errorMsg.includes("network") || errorMsg.includes("connection")) {
+  // File system errors
+  if (errorMsg.includes("enoent") || errorMsg.includes("not found")) {
     return {
-      type: "network",
-      title: "Connection Error",
-      message: "Unable to connect to cluster",
-      action: "Check your network connection and cluster availability",
+      type: "file",
+      title: "Kubeconfig Not Found",
+      message: "No kubeconfig file found",
+      action: "Create a kubeconfig file or check your Kubernetes setup",
+    };
+  }
+
+  if (errorMsg.includes("eacces") || errorMsg.includes("permission denied")) {
+    return {
+      type: "permission",
+      title: "Permission Denied",
+      message: "Cannot access the kubeconfig file",
+      action: "Check the file permissions of your kubeconfig",
+    };
+  }
+
+  // YAML parsing errors
+  if (errorMsg.includes("yaml") || errorMsg.includes("parse") || errorMsg.includes("syntax")) {
+    return {
+      type: "yaml",
+      title: "Invalid Kubeconfig",
+      message: "Kubeconfig file contains invalid YAML",
+      action: "Check your kubeconfig syntax or regenerate the file",
     };
   }
 
@@ -104,16 +97,32 @@ function analyzeError(error: Error): KubeError {
 }
 
 /**
- * Shows an enhanced error toast with actionable guidance
+ * Shows an enhanced error toast with actionable guidance. Accepts anything that
+ * can be thrown and never throws itself (safe to call from catch blocks).
  */
-export async function showErrorToast(error: Error): Promise<void> {
-  const kubeError = analyzeError(error);
+export async function showErrorToast(error: unknown): Promise<void> {
+  try {
+    const normalized = error instanceof Error ? error : new Error(String(error));
+    // Typed errors already carry a specific message and next step
+    const isTyped = normalized instanceof KubeconfigError || normalized instanceof ValidationError;
+    if (!isTyped) console.error("Unhandled error:", error);
+    const kubeError: KubeError = isTyped
+      ? {
+          type: normalized instanceof ValidationError ? "validation" : "kubeconfig",
+          title: normalized instanceof ValidationError ? "Validation Error" : "Kubeconfig Error",
+          message: normalized.message,
+          action: normalized.action,
+        }
+      : analyzeError(normalized);
 
-  await showToast({
-    style: Toast.Style.Failure,
-    title: kubeError.title,
-    message: kubeError.action ? `${kubeError.message}\n💡 ${kubeError.action}` : kubeError.message,
-  });
+    await showToast({
+      style: Toast.Style.Failure,
+      title: kubeError.title,
+      message: kubeError.action ? `${kubeError.message}\n${kubeError.action}` : kubeError.message,
+    });
+  } catch (toastError) {
+    console.error("Failed to show error toast:", toastError);
+  }
 }
 
 /**
@@ -125,63 +134,4 @@ export async function showSuccessToast(title: string, message?: string): Promise
     title,
     message,
   });
-}
-
-/**
- * Shows an informational toast
- */
-export async function showInfoToast(title: string, message?: string): Promise<void> {
-  await showToast({
-    style: Toast.Style.Animated,
-    title,
-    message,
-  });
-}
-
-/**
- * Shows a warning toast with actionable guidance
- */
-export async function showWarningToast(title: string, message: string, action?: string): Promise<void> {
-  await showToast({
-    style: Toast.Style.Failure,
-    title: `⚠️ ${title}`,
-    message: action ? `${message}\n💡 ${action}` : message,
-  });
-}
-
-/**
- * Shows a loading toast that can be updated
- */
-export async function showLoadingToast(title: string, message?: string): Promise<Toast> {
-  return await showToast({
-    style: Toast.Style.Animated,
-    title,
-    message,
-  });
-}
-
-/**
- * Creates user-friendly validation errors
- */
-export class ValidationError extends Error {
-  constructor(
-    message: string,
-    public action?: string
-  ) {
-    super(message);
-    this.name = "ValidationError";
-  }
-}
-
-/**
- * Creates user-friendly kubeconfig errors
- */
-export class KubeconfigError extends Error {
-  constructor(
-    message: string,
-    public action?: string
-  ) {
-    super(message);
-    this.name = "KubeconfigError";
-  }
 }
