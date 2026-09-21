@@ -78,6 +78,28 @@ describe("switchAndClose", () => {
     expect(mocks.showHUD).not.toHaveBeenCalled();
   });
 
+  it("skips closing and always shows a HUD when closeWindow is false", async () => {
+    for (const closeAfterSwitch of [true, false]) {
+      vi.clearAllMocks();
+      mocks.getPreferences.mockReturnValue({ closeAfterSwitch });
+      mocks.rememberContext.mockResolvedValue(undefined);
+      mocks.confirmAlert.mockResolvedValue(true);
+
+      const ok = await switchAndClose(async () => true, { contextName: "b", fromContext: "a", closeWindow: false });
+
+      expect(ok).toBe(true);
+      expect(mocks.closeMainWindow).not.toHaveBeenCalled();
+      expect(mocks.showHUD).toHaveBeenCalledWith("Switched to b");
+      expect(mocks.showToast).not.toHaveBeenCalled();
+    }
+  });
+
+  it("closes as before when closeWindow is explicitly true", async () => {
+    await switchAndClose(async () => true, { contextName: "b", fromContext: "a", closeWindow: true });
+    expect(mocks.closeMainWindow).toHaveBeenCalledOnce();
+    expect(mocks.showHUD).toHaveBeenCalledOnce();
+  });
+
   it("shows an error toast and returns false when perform throws", async () => {
     const err = new KubeconfigError("boom", "try again");
 

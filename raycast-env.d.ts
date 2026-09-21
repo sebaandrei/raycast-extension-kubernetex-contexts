@@ -20,6 +20,8 @@ type ExtensionPreferences = {
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
+  /** Preferences accessible in the `menu-bar` command */
+  export type MenuBar = ExtensionPreferences & {}
   /** Preferences accessible in the `list-contexts` command */
   export type ListContexts = ExtensionPreferences & {}
   /** Preferences accessible in the `current-context` command */
@@ -33,6 +35,8 @@ declare namespace Preferences {
 }
 
 declare namespace Arguments {
+  /** Arguments passed to the `menu-bar` command */
+  export type MenuBar = {}
   /** Arguments passed to the `list-contexts` command */
   export type ListContexts = {}
   /** Arguments passed to the `current-context` command */

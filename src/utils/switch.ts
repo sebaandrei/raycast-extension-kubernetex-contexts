@@ -11,6 +11,8 @@ export interface SwitchOptions {
   namespace?: string;
   /** Context that is active before the switch (used for "switch back"). */
   fromContext?: string | null;
+  /** Close the Raycast window and show a HUD (default true). False (menu bar): no close, always a HUD. */
+  closeWindow?: boolean;
 }
 
 export function formatSwitchMessage(contextName: string, namespace?: string): string {
@@ -54,7 +56,9 @@ export async function switchAndClose(perform: () => Promise<unknown>, opts: Swit
     if (opts.namespace) await rememberNamespace(opts.contextName, opts.namespace);
 
     const message = formatSwitchMessage(opts.contextName, opts.namespace);
-    if (getPreferences().closeAfterSwitch) {
+    if (opts.closeWindow === false) {
+      await showHUD(message);
+    } else if (getPreferences().closeAfterSwitch) {
       await closeMainWindow({ clearRootSearch: true });
       await showHUD(message);
     } else {

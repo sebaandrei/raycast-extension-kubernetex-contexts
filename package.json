@@ -49,6 +49,13 @@
   ],
   "commands": [
     {
+      "name": "menu-bar",
+      "title": "Kubernetes Context",
+      "description": "Show the current Kubernetes context in the menu bar and switch contexts. Refreshes every minute and whenever opened.",
+      "mode": "menu-bar",
+      "interval": "1m"
+    },
+    {
       "name": "list-contexts",
       "title": "Kube Contexts",
       "description": "Search and switch Kubernetes contexts by name, cluster, user, or namespace",
