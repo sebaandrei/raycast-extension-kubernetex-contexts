@@ -4,10 +4,11 @@ import { useKubeconfig } from "./hooks/useKubeconfig";
 import { createContext, deleteContext, modifyContext } from "./utils/kubeconfig-direct";
 import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
+import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
 
 export default function ManageContexts() {
-  const { contexts, clusters, users, isLoading, error, refresh, switchContext } = useKubeconfig();
+  const { contexts, clusters, users, isLoading, error, refresh, switchContext, currentContext } = useKubeconfig();
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredContexts = useMemo(() => {
@@ -127,7 +128,14 @@ export default function ManageContexts() {
               <Action.Push
                 title={`View ${context.name} Details`}
                 icon={Icon.Info}
-                target={<ContextDetails context={context} onSwitch={switchContext} />}
+                target={
+                  <ContextDetails
+                    context={context}
+                    onSwitch={(name) =>
+                      switchAndClose(() => switchContext(name), { contextName: name, fromContext: currentContext })
+                    }
+                  />
+                }
               />
               <Action
                 title="Refresh"

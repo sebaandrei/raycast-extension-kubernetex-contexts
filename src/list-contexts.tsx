@@ -1,12 +1,12 @@
-import { List, ActionPanel, Action, Icon, popToRoot, showToast, Toast } from "@raycast/api";
-import { showFailureToast } from "@raycast/utils";
+import { List, ActionPanel, Action, Icon, showToast, Toast } from "@raycast/api";
 import { useState, useMemo } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { searchAndFilterContexts, addRecentContext, SearchFilters } from "./utils/search-filter";
+import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
 
 export default function ListContexts() {
-  const { contexts, isLoading, error, switchContext } = useKubeconfig();
+  const { contexts, currentContext, isLoading, error, switchContext } = useKubeconfig();
   const [searchQuery, setSearchQuery] = useState("");
 
   // Apply search with advanced filtering
@@ -16,28 +16,11 @@ export default function ListContexts() {
   }, [contexts, searchQuery]);
 
   const handleSwitchContext = async (contextName: string) => {
-    try {
-      const success = await switchContext(contextName);
-      if (success) {
-        addRecentContext(contextName);
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Context Switched",
-          message: `Switched to: ${contextName}`,
-        });
-        // Go back to Raycast main command list
-        await popToRoot();
-      } else {
-        await showFailureToast("Context switch failed", {
-          title: "Failed to switch context",
-          message: `Could not switch to context '${contextName}'`,
-        });
-      }
-    } catch (err) {
-      await showFailureToast(err as Error, {
-        title: "Failed to switch context",
-      });
-    }
+    const switched = await switchAndClose(() => switchContext(contextName), {
+      contextName,
+      fromContext: currentContext,
+    });
+    if (switched) addRecentContext(contextName);
   };
 
   if (error) {
@@ -116,7 +99,7 @@ export default function ListContexts() {
               <Action.Push
                 title={`View ${context.name} Details`}
                 icon={Icon.Info}
-                target={<ContextDetails context={context} onSwitch={switchContext} />}
+                target={<ContextDetails context={context} onSwitch={handleSwitchContext} />}
               />
             </ActionPanel>
           }

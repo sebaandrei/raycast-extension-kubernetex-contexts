@@ -1,6 +1,6 @@
-import { Detail, ActionPanel, Action, popToRoot, Keyboard, showToast, Toast } from "@raycast/api";
-import { showFailureToast } from "@raycast/utils";
+import { Detail, ActionPanel, Action, Keyboard } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
+import { switchAndClose } from "./utils/switch";
 
 export default function CurrentContext() {
   const { contexts, currentContext, kubeconfigInfo, isLoading, error, refresh, switchContext } = useKubeconfig();
@@ -86,24 +86,8 @@ Use the actions below to manage your contexts quickly.
 
   const otherContexts = contexts.filter((ctx) => !ctx.current).slice(0, 5);
 
-  const handleSwitchContext = async (contextName: string) => {
-    try {
-      const success = await switchContext(contextName);
-      if (success) {
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Context Switched",
-          message: `Switched to: ${contextName}`,
-        });
-        // Go back to Raycast main command list
-        await popToRoot();
-      }
-    } catch (err) {
-      await showFailureToast(err as Error, {
-        title: "Failed to switch context",
-      });
-    }
-  };
+  const handleSwitchContext = (contextName: string) =>
+    switchAndClose(() => switchContext(contextName), { contextName, fromContext: currentContext });
 
   return (
     <Detail

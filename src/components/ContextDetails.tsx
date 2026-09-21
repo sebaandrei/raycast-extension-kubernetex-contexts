@@ -1,27 +1,14 @@
-import { Detail, ActionPanel, Action, Icon, useNavigation, popToRoot } from "@raycast/api";
+import { Detail, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
 import { KubernetesContext } from "../types";
-import { showSuccessToast, showErrorToast } from "../utils/errors";
 
 interface ContextDetailsProps {
   context: KubernetesContext;
-  onSwitch: (contextName: string) => Promise<boolean>;
+  /** Ready-made handler (already gives feedback and closes Raycast). */
+  onSwitch: (contextName: string) => Promise<unknown>;
 }
 
 export function ContextDetails({ context, onSwitch }: ContextDetailsProps) {
   const { pop } = useNavigation();
-
-  const handleSwitchContext = async (contextName: string) => {
-    try {
-      const success = await onSwitch(contextName);
-      if (success) {
-        await showSuccessToast("Context Switched", `Switched to: ${contextName}`);
-        // Go back to Raycast main command list
-        await popToRoot();
-      }
-    } catch (err) {
-      await showErrorToast(err as Error);
-    }
-  };
 
   const generateMarkdown = () => {
     return `
@@ -127,7 +114,7 @@ Use the actions below to manage this context.
             <Action
               title={`Switch to ${context.name}`}
               icon={Icon.ArrowRight}
-              onAction={() => handleSwitchContext(context.name)}
+              onAction={() => onSwitch(context.name)}
             />
           )}
         </ActionPanel>

@@ -1,7 +1,7 @@
-import { List, ActionPanel, Action, useNavigation, Icon, popToRoot, showToast, Toast } from "@raycast/api";
-import { showFailureToast } from "@raycast/utils";
+import { List, ActionPanel, Action, useNavigation, Icon } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
+import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
 
 export default function SwitchContextWithNamespace() {
@@ -19,53 +19,15 @@ export default function SwitchContextWithNamespace() {
     );
   };
 
-  const handleNamespaceSelect = async (contextName: string, namespace: string) => {
-    try {
-      const success = await switchContextWithNamespace(contextName, namespace);
-      if (success) {
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Context Switched",
-          message: `Switched to: ${contextName} (namespace: ${namespace})`,
-        });
-        // Go back to Raycast main command list
-        await popToRoot();
-      } else {
-        await showFailureToast("Context switch failed", {
-          title: "Failed to switch context",
-          message: `Could not switch to context '${contextName}' with namespace '${namespace}'`,
-        });
-      }
-    } catch (err) {
-      await showFailureToast(err as Error, {
-        title: "Failed to switch context",
-      });
-    }
-  };
+  const handleNamespaceSelect = (contextName: string, namespace: string) =>
+    switchAndClose(() => switchContextWithNamespace(contextName, namespace), {
+      contextName,
+      namespace,
+      fromContext: currentContext,
+    });
 
-  const handleQuickSwitch = async (contextName: string) => {
-    try {
-      const success = await switchContextWithNamespace(contextName);
-      if (success) {
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Context Switched",
-          message: `Switched to: ${contextName}`,
-        });
-        // Go back to Raycast main command list
-        await popToRoot();
-      } else {
-        await showFailureToast("Context switch failed", {
-          title: "Failed to switch context",
-          message: `Could not switch to context '${contextName}'`,
-        });
-      }
-    } catch (err) {
-      await showFailureToast(err as Error, {
-        title: "Failed to switch context",
-      });
-    }
-  };
+  const handleQuickSwitch = (contextName: string) =>
+    switchAndClose(() => switchContextWithNamespace(contextName), { contextName, fromContext: currentContext });
 
   if (error) {
     return (
@@ -102,7 +64,7 @@ export default function SwitchContextWithNamespace() {
               <Action.Push
                 title={`View ${context.name} Details`}
                 icon={Icon.Info}
-                target={<ContextDetails context={context} onSwitch={(name) => switchContextWithNamespace(name)} />}
+                target={<ContextDetails context={context} onSwitch={handleQuickSwitch} />}
               />
             </ActionPanel>
           }
