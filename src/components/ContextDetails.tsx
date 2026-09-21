@@ -1,5 +1,6 @@
 import { Detail, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
 import { KubernetesContext } from "../types";
+import { escapeMarkdown } from "../utils/markdown";
 
 interface ContextDetailsProps {
   context: KubernetesContext;
@@ -11,61 +12,43 @@ export function ContextDetails({ context, onSwitch }: ContextDetailsProps) {
   const { pop } = useNavigation();
 
   const generateMarkdown = () => {
+    const name = escapeMarkdown(context.name);
+    const details = context.clusterDetails;
     return `
-# Context Details: **${context.name}**
+# ${name}
 
-${context.current ? "## ✅ **CURRENT ACTIVE CONTEXT**" : "## 📋 Context Information"}
+${context.current ? "**Current active context**" : "Not the current context"}
 
 ### Basic Information
-- **Name**: ${context.name}
-- **Cluster**: ${context.cluster}
-- **User**: ${context.user}
-- **Namespace**: ${context.namespace || "default"}
-- **Status**: ${context.current ? "🟢 Active" : "⚪ Inactive"}
-
-### Authentication
-- **Authentication Method**: ${context.userAuthMethod || "Unknown"}
+- **Name**: ${name}
+- **Cluster**: ${escapeMarkdown(context.cluster)}
+- **User**: ${escapeMarkdown(context.user)}
+- **Namespace**: ${escapeMarkdown(context.namespace || "default")}
+- **Authentication**: ${escapeMarkdown(context.userAuthMethod || "Unknown")}
 
 ${
-  context.clusterDetails
+  details
     ? `
 ### Cluster Details
-- **Server**: ${context.clusterDetails.server || "Not specified"}
-- **Hostname**: ${context.clusterDetails.hostname}
-- **Port**: ${context.clusterDetails.port}
-- **Protocol**: ${context.clusterDetails.protocol}
-- **Security**: ${context.clusterDetails.isSecure ? "🔒 Secure (TLS Enabled)" : "⚠️ Insecure (TLS Disabled)"}
-- **CA Certificate**: ${context.clusterDetails.hasCA ? "✅ Present" : "❌ Missing"}
-
-### Connection Information
-- **Connection Security**: ${context.clusterDetails.isSecure ? "Encrypted with TLS" : "Unencrypted connection"}
-- **Certificate Authority**: ${context.clusterDetails.hasCA ? "CA certificate configured for validation" : "No CA certificate - may skip TLS verification"}
+- **Server**: ${escapeMarkdown(details.server || "Not specified")}
+- **Hostname**: ${escapeMarkdown(details.hostname)}
+- **Port**: ${escapeMarkdown(details.port)}
+- **Protocol**: ${escapeMarkdown(details.protocol)}
+- **Security**: ${details.isSecure ? "Secure (TLS enabled)" : "Insecure (TLS disabled)"}
+- **CA Certificate**: ${details.hasCA ? "Present" : "Missing"}
 `
     : `
 ### Cluster Details
-*Cluster information not available - cluster may not be properly configured*
+*Cluster information not available. The cluster may not be configured.*
 `
 }
 
 ### Usage
 ${
   context.current
-    ? `
-This is your **current active context**. All kubectl commands will be executed against this context.
-
-To switch to a different context, use the "List Contexts" command and select another context.
-`
-    : `
-This context is **not currently active**. 
-
-To switch to this context:
-1. Use the "Switch to ${context.name}" action below
-2. Or use the "List Contexts" command to switch between contexts
-`
+    ? `All kubectl commands run against this context. Use the "Kube Contexts" command to switch to another one.`
+    : `Use the "Switch to ${name}" action below, or the "Kube Contexts" command, to make this the active context.`
 }
-
-### Quick Actions
-Use the actions below to manage this context.
     `;
   };
 

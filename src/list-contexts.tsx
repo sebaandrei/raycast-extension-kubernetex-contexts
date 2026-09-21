@@ -1,53 +1,38 @@
 import { List, ActionPanel, Action, Icon, showToast, Toast } from "@raycast/api";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
-import { searchAndFilterContexts, addRecentContext, SearchFilters } from "./utils/search-filter";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
-import { contextIcon, prodAccessory } from "./components/context-visuals";
+import { KubeconfigEmptyView } from "./components/KubeconfigEmptyView";
+import {
+  contextIcon,
+  contextKeywords,
+  contextSubtitle,
+  currentFirst,
+  prodAccessory,
+  serverLabel,
+} from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function ListContexts() {
-  const { contexts, currentContext, isLoading, error, switchContext } = useKubeconfig();
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Apply search with advanced filtering
-  const searchResults = useMemo(() => {
-    const filters: SearchFilters = { query: searchQuery };
-    return searchAndFilterContexts(contexts, filters);
-  }, [contexts, searchQuery]);
-
+  const { contexts, currentContext, isLoading, error, refresh, switchContext } = useKubeconfig();
   const handleSwitchContext = async (contextName: string) => {
-    const switched = await switchAndClose(() => switchContext(contextName), {
-      contextName,
-      fromContext: currentContext,
-    });
-    if (switched) addRecentContext(contextName);
+    await switchAndClose(() => switchContext(contextName), { contextName, fromContext: currentContext });
   };
 
   const isProd = useProductionMatcher();
 
-  if (error) {
-    return (
-      <List>
-        <List.Item title="Error Loading Contexts" subtitle={error.message} accessories={[{ text: "❌" }]} />
-      </List>
-    );
-  }
+  const sortedContexts = useMemo(() => currentFirst(contexts), [contexts]);
 
   return (
-    <List
-      isLoading={isLoading}
-      searchText={searchQuery}
-      onSearchTextChange={setSearchQuery}
-      searchBarPlaceholder="Search contexts by name, cluster, user, or namespace..."
-    >
-      {searchResults.map(({ context, relevanceScore, matchedFields }) => (
+    <List isLoading={isLoading} searchBarPlaceholder="Search contexts by name, cluster, user, or namespace">
+      {sortedContexts.map((context) => (
         <List.Item
           key={context.name}
           icon={contextIcon(context, isProd(context.name))}
           title={context.name}
-          subtitle={`Cluster: ${context.cluster} • User: ${context.user}${context.clusterDetails ? ` • ${context.clusterDetails.hostname}:${context.clusterDetails.port}` : ""}`}
+          subtitle={{ value: contextSubtitle(context), tooltip: serverLabel(context) }}
+          keywords={contextKeywords(context)}
           accessories={[
             ...prodAccessory(isProd(context.name)),
             {
@@ -66,18 +51,6 @@ export default function ListContexts() {
                   },
                 ]
               : []),
-            ...(searchQuery
-              ? [
-                  {
-                    text: `${relevanceScore.toFixed(0)}%`,
-                    tooltip: `Relevance (matched: ${matchedFields.join(", ")})`,
-                  },
-                ]
-              : []),
-            {
-              text: context.current ? "●" : "",
-              tooltip: context.current ? "Current context" : undefined,
-            },
           ]}
           actions={
             <ActionPanel>
@@ -110,13 +83,7 @@ export default function ListContexts() {
           }
         />
       ))}
-      {searchResults.length === 0 && !isLoading && (
-        <List.Item
-          title="No Matching Contexts"
-          subtitle={searchQuery ? `No contexts match "${searchQuery}"` : "Check your ~/.kube/config file"}
-          accessories={[{ text: searchQuery ? "🔍" : "⚠️" }]}
-        />
-      )}
+      <KubeconfigEmptyView error={error} onRefresh={refresh} />
     </List>
   );
 }

@@ -1,5 +1,6 @@
 import { Detail, ActionPanel, Action, Keyboard } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
+import { escapeMarkdown } from "./utils/markdown";
 import { switchAndClose } from "./utils/switch";
 
 export default function CurrentContext() {
@@ -12,10 +13,10 @@ export default function CurrentContext() {
       return `
 # Current Context - Error
 
-❌ **Error loading kubeconfig**
+**Error loading kubeconfig**
 
 \`\`\`
-${error.message}
+${error.message.replace(/`/g, "'")}
 \`\`\`
 
 ## Troubleshooting
@@ -29,15 +30,15 @@ ${error.message}
       return `
 # No Current Context
 
-⚠️ **No current context is set**
+**No current context is set**
 
 ## Kubeconfig Information
-- **File**: ${kubeconfigInfo.path}
-- **Available**: ${kubeconfigInfo.available ? "✅ Yes" : "❌ No"}
+- **File**: ${escapeMarkdown(kubeconfigInfo.path)}
+- **Available**: ${kubeconfigInfo.available ? "Yes" : "No"}
 - **Total Contexts**: ${kubeconfigInfo.contextCount}
 
 ## Available Contexts
-${contexts.length > 0 ? contexts.map((ctx) => `- ${ctx.name} (${ctx.cluster})`).join("\n") : "No contexts found"}
+${contexts.length > 0 ? contexts.map((ctx) => `- ${escapeMarkdown(ctx.name)} (${escapeMarkdown(ctx.cluster)})`).join("\n") : "No contexts found"}
 
 *Use the "Kube Contexts" command to switch between contexts*
       `;
@@ -46,34 +47,34 @@ ${contexts.length > 0 ? contexts.map((ctx) => `- ${ctx.name} (${ctx.cluster})`).
     return `
 # Current Context
 
-## ✅ Active Context: **${currentContext}**
+## Active Context: **${escapeMarkdown(currentContext)}**
 
 ${
   currentCtx
     ? `
 ## Context Details
-- **Name**: ${currentCtx.name}
-- **Cluster**: ${currentCtx.cluster}
-- **User**: ${currentCtx.user}
-- **Namespace**: ${currentCtx.namespace || "default"}
-- **Authentication**: ${currentCtx.userAuthMethod || "Unknown"}
+- **Name**: ${escapeMarkdown(currentCtx.name)}
+- **Cluster**: ${escapeMarkdown(currentCtx.cluster)}
+- **User**: ${escapeMarkdown(currentCtx.user)}
+- **Namespace**: ${escapeMarkdown(currentCtx.namespace || "default")}
+- **Authentication**: ${escapeMarkdown(currentCtx.userAuthMethod || "Unknown")}
 
 ## Cluster Information
 ${
   currentCtx.clusterDetails
     ? `
-- **Server**: ${currentCtx.clusterDetails.server}
-- **Hostname**: ${currentCtx.clusterDetails.hostname}
-- **Port**: ${currentCtx.clusterDetails.port}
-- **Protocol**: ${currentCtx.clusterDetails.protocol}
-- **Security**: ${currentCtx.clusterDetails.isSecure ? "🔒 Secure" : "⚠️ Insecure"}
-- **CA Certificate**: ${currentCtx.clusterDetails.hasCA ? "✅ Present" : "❌ Missing"}
+- **Server**: ${escapeMarkdown(currentCtx.clusterDetails.server)}
+- **Hostname**: ${escapeMarkdown(currentCtx.clusterDetails.hostname)}
+- **Port**: ${escapeMarkdown(currentCtx.clusterDetails.port)}
+- **Protocol**: ${escapeMarkdown(currentCtx.clusterDetails.protocol)}
+- **Security**: ${currentCtx.clusterDetails.isSecure ? "Secure" : "Insecure"}
+- **CA Certificate**: ${currentCtx.clusterDetails.hasCA ? "Present" : "Missing"}
 `
     : "- **Server**: Unknown"
 }
 
 ## File Information
-- **Context File**: ${kubeconfigInfo.path}
+- **Context File**: ${escapeMarkdown(kubeconfigInfo.path)}
 - **Total Contexts Available**: ${kubeconfigInfo.contextCount}
 `
     : ""

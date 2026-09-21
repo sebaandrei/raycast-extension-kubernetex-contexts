@@ -1,29 +1,25 @@
 import { Alert, List, ActionPanel, Action, Icon, Form, useNavigation, Keyboard, confirmAlert } from "@raycast/api";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { createContext, deleteContext, modifyContext } from "./utils/kubeconfig-direct";
 import { KubernetesContext } from "./types";
 import { showSuccessToast, showErrorToast } from "./utils/errors";
 import { switchAndClose } from "./utils/switch";
 import { ContextDetails } from "./components/ContextDetails";
-import { contextIcon, prodAccessory } from "./components/context-visuals";
+import { KubeconfigEmptyView } from "./components/KubeconfigEmptyView";
+import {
+  contextIcon,
+  contextKeywords,
+  contextSubtitle,
+  currentFirst,
+  prodAccessory,
+  serverLabel,
+} from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function ManageContexts() {
   const { contexts, clusters, users, isLoading, error, refresh, switchContext, currentContext } = useKubeconfig();
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const filteredContexts = useMemo(() => {
-    if (!searchQuery) return contexts;
-
-    return contexts.filter(
-      (context) =>
-        context.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        context.cluster.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        context.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (context.namespace && context.namespace.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [contexts, searchQuery]);
+  const sortedContexts = useMemo(() => currentFirst(contexts), [contexts]);
 
   const isProd = useProductionMatcher();
 
@@ -57,19 +53,10 @@ export default function ManageContexts() {
     }
   }
 
-  if (error) {
-    return (
-      <List>
-        <List.Item title="Error Loading Contexts" subtitle={error.message} accessories={[{ text: "❌" }]} />
-      </List>
-    );
-  }
-
   return (
     <List
       isLoading={isLoading}
-      onSearchTextChange={setSearchQuery}
-      searchBarPlaceholder="Search contexts to manage..."
+      searchBarPlaceholder="Search contexts to manage"
       actions={
         <ActionPanel>
           <Action.Push
@@ -86,34 +73,25 @@ export default function ManageContexts() {
         </ActionPanel>
       }
     >
-      {filteredContexts.map((context) => (
+      {sortedContexts.map((context) => (
         <List.Item
           key={context.name}
           icon={contextIcon(context, isProd(context.name))}
           title={context.name}
-          subtitle={`Cluster: ${context.cluster} • User: ${context.user}${context.clusterDetails ? ` • ${context.clusterDetails.hostname}:${context.clusterDetails.port}` : ""}`}
+          subtitle={{ value: contextSubtitle(context), tooltip: serverLabel(context) }}
+          keywords={contextKeywords(context)}
           accessories={[
             ...prodAccessory(isProd(context.name)),
-            ...[
-              {
-                text: `ns: ${context.namespace || "default"}`,
-                tooltip: "Namespace",
-              },
-              {
-                text: context.userAuthMethod || "Unknown",
-                tooltip: "Authentication Method",
-              },
-              context.clusterDetails
-                ? {
+            { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
+            { text: context.userAuthMethod || "Unknown", tooltip: "Authentication Method" },
+            ...(context.clusterDetails
+              ? [
+                  {
                     text: context.clusterDetails.protocol,
                     tooltip: `${context.clusterDetails.isSecure ? "Secure" : "Insecure"} connection`,
-                  }
-                : {},
-              {
-                text: context.current ? "current" : "",
-                tooltip: context.current ? "Active context" : undefined,
-              },
-            ].filter((acc) => acc.text !== undefined),
+                  },
+                ]
+              : []),
           ]}
           actions={
             <ActionPanel>
@@ -169,22 +147,13 @@ export default function ManageContexts() {
         />
       ))}
 
-      {filteredContexts.length === 0 && !isLoading && (
-        <List.Item
-          title="No Contexts Found"
-          subtitle={searchQuery ? `No contexts match "${searchQuery}"` : "No contexts available for management"}
-          accessories={[{ text: searchQuery ? "🔍" : "⚠️" }]}
-          actions={
-            <ActionPanel>
-              <Action.Push
-                title="Create New Context"
-                icon={Icon.Plus}
-                target={<CreateContextForm clusters={clusters} users={users} onCreated={refresh} />}
-              />
-            </ActionPanel>
-          }
+      <KubeconfigEmptyView error={error} onRefresh={refresh}>
+        <Action.Push
+          title="Create New Context"
+          icon={Icon.Plus}
+          target={<CreateContextForm clusters={clusters} users={users} onCreated={refresh} />}
         />
-      )}
+      </KubeconfigEmptyView>
     </List>
   );
 }

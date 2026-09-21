@@ -2,12 +2,20 @@ import { List, ActionPanel, Action, useNavigation, Icon } from "@raycast/api";
 import { useKubeconfig } from "./hooks/useKubeconfig";
 import { NamespaceSelector } from "./components/NamespaceSelector";
 import { switchAndClose } from "./utils/switch";
+import { KubeconfigEmptyView } from "./components/KubeconfigEmptyView";
 import { ContextDetails } from "./components/ContextDetails";
-import { contextIcon, prodAccessory } from "./components/context-visuals";
+import {
+  contextIcon,
+  contextKeywords,
+  contextSubtitle,
+  prodAccessory,
+  serverLabel,
+} from "./components/context-visuals";
 import { useProductionMatcher } from "./hooks/useProductionMatcher";
 
 export default function SwitchContextWithNamespace() {
-  const { contexts, currentContext, namespaces, isLoading, error, switchContextWithNamespace } = useKubeconfig();
+  const { contexts, currentContext, namespaces, isLoading, error, refresh, switchContextWithNamespace } =
+    useKubeconfig();
   const { push } = useNavigation();
   const handleContextSelect = (contextName: string) => {
     const context = contexts.find((ctx) => ctx.name === contextName);
@@ -33,32 +41,22 @@ export default function SwitchContextWithNamespace() {
 
   const isProd = useProductionMatcher();
 
-  if (error) {
-    return (
-      <List>
-        <List.Item title="Error Loading Contexts" subtitle={error.message} accessories={[{ text: "❌" }]} />
-      </List>
-    );
-  }
-
   // Filter out current context since we're on a switch-specific screen
   const availableContexts = contexts.filter((ctx) => !ctx.current);
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search contexts to switch to...">
-      <List.Item
-        title={`Current: ${currentContext || "None"}`}
-        subtitle="Currently active context"
-        accessories={[{ text: "●" }]}
-      />
-
+    <List isLoading={isLoading} searchBarPlaceholder="Search contexts to switch to">
       {availableContexts.map((context) => (
         <List.Item
           key={context.name}
           icon={contextIcon(context, isProd(context.name))}
           title={context.name}
-          subtitle={`Cluster: ${context.cluster} • User: ${context.user} • Namespace: ${context.namespace || "default"}`}
-          accessories={prodAccessory(isProd(context.name))}
+          subtitle={{ value: contextSubtitle(context), tooltip: serverLabel(context) }}
+          keywords={contextKeywords(context)}
+          accessories={[
+            ...prodAccessory(isProd(context.name)),
+            { text: `ns: ${context.namespace || "default"}`, tooltip: "Namespace" },
+          ]}
           actions={
             <ActionPanel>
               <Action title={`Switch with Namespace Selection`} onAction={() => handleContextSelect(context.name)} />
@@ -77,16 +75,14 @@ export default function SwitchContextWithNamespace() {
         />
       ))}
 
-      {availableContexts.length === 0 && contexts.length > 0 && !isLoading && (
-        <List.Item
+      {contexts.length > 0 ? (
+        <List.EmptyView
+          icon={Icon.CheckCircle}
           title="No Other Contexts Available"
-          subtitle="All available contexts are already current"
-          accessories={[{ text: "ℹ️" }]}
+          description={`${currentContext ?? "The current context"} is the only context in your kubeconfig`}
         />
-      )}
-
-      {contexts.length === 0 && !isLoading && (
-        <List.Item title="No Contexts Found" subtitle="Check your ~/.kube/config file" accessories={[{ text: "⚠️" }]} />
+      ) : (
+        <KubeconfigEmptyView error={error} onRefresh={refresh} />
       )}
     </List>
   );

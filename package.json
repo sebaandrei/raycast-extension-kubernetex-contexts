@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "kube-context-manager",
   "title": "Kubernetes Context Manager",
-  "description": "⚡ Lightning-fast Kubernetes context switching with advanced search, rich metadata, and comprehensive management. No kubectl required!",
+  "description": "Fast Kubernetes context switching with search, rich metadata, and context management. No kubectl required.",
   "icon": "k8s.png",
   "author": "sebastian_andrei_roman",
   "categories": [
@@ -51,25 +51,25 @@
     {
       "name": "list-contexts",
       "title": "Kube Contexts",
-      "description": "🔍 Search and switch Kubernetes contexts with advanced filtering and rich metadata",
+      "description": "Search and switch Kubernetes contexts by name, cluster, user, or namespace",
       "mode": "view"
     },
     {
       "name": "current-context",
       "title": "Current Context",
-      "description": "📍 View current context details with cluster info and quick switching actions",
+      "description": "View current context details with cluster info and quick switching actions",
       "mode": "view"
     },
     {
       "name": "switch-context-namespace",
       "title": "Switch Context with Namespace",
-      "description": "🔄 Two-step workflow: select context, then namespace for efficient switching",
+      "description": "Two-step workflow: select context, then namespace for efficient switching",
       "mode": "view"
     },
     {
       "name": "manage-contexts",
       "title": "Manage Contexts",
-      "description": "🛠️ Complete context lifecycle management: create, modify, and delete with validation",
+      "description": "Complete context lifecycle management: create, modify, and delete with validation",
       "mode": "view"
     }
   ],

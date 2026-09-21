@@ -124,7 +124,7 @@ export async function showErrorToast(error: Error): Promise<void> {
   await showToast({
     style: Toast.Style.Failure,
     title: kubeError.title,
-    message: kubeError.action ? `${kubeError.message}\n💡 ${kubeError.action}` : kubeError.message,
+    message: kubeError.action ? `${kubeError.message}\n${kubeError.action}` : kubeError.message,
   });
 }
 
@@ -156,8 +156,8 @@ export async function showInfoToast(title: string, message?: string): Promise<vo
 export async function showWarningToast(title: string, message: string, action?: string): Promise<void> {
   await showToast({
     style: Toast.Style.Failure,
-    title: `⚠️ ${title}`,
-    message: action ? `${message}\n💡 ${action}` : message,
+    title: title,
+    message: action ? `${message}\n${action}` : message,
   });
 }
 
