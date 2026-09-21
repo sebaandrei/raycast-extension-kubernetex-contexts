@@ -1,5 +1,4 @@
 CLAUDE.md
-*.backup
 .DS_Store
 node_modules/
 .git/

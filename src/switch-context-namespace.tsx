@@ -49,7 +49,7 @@ export default function SwitchContextWithNamespace() {
 
   const isProd = useProductionMatcher();
 
-  // Filter out current context since we're on a switch-specific screen
+  // The current context is not a switch target, so leave it out
   const availableContexts = useMemo(() => contexts.filter((ctx) => !ctx.current), [contexts]);
   const { pinned, recent, toggle } = usePinnedRecent();
   const sections = useMemo(

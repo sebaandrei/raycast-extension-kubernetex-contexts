@@ -14,7 +14,7 @@ export async function setPreviousContext(name: string): Promise<boolean> {
 }
 
 /**
- * Remembers the context we switched away from. Storage problems never fail a switch.
+ * Remembers the context we switched away from; only switches made through this extension are recorded. Storage problems never fail a switch.
  */
 export async function rememberPreviousContext(from: string | null | undefined, to: string): Promise<void> {
   if (!from || from === to) return;

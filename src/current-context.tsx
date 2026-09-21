@@ -9,6 +9,9 @@ export default function CurrentContext() {
   const currentCtx = contexts.find((ctx) => ctx.current);
 
   const generateMarkdown = () => {
+    // Avoid flashing the "No Current Context" body before the first read completes
+    if (isLoading && !currentContext && !error) return "";
+
     if (error) {
       return `
 # Current Context - Error
@@ -98,7 +101,6 @@ Use the actions below to manage your contexts quickly.
         <ActionPanel>
           <Action title="Refresh" onAction={refresh} shortcut={Keyboard.Shortcut.Common.Refresh} />
           {otherContexts.map((ctx, index) => {
-            // Map index to valid KeyEquivalent values
             const keyMap = ["1", "2", "3", "4", "5"] as const;
 
             return (
@@ -106,12 +108,7 @@ Use the actions below to manage your contexts quickly.
                 key={ctx.name}
                 title={`Switch to ${ctx.name}`}
                 onAction={() => handleSwitchContext(ctx.name)}
-                {...(index < 5 && {
-                  shortcut: {
-                    modifiers: ["cmd"] as const,
-                    key: keyMap[index],
-                  },
-                })}
+                shortcut={{ modifiers: ["cmd"], key: keyMap[index] }}
               />
             );
           })}

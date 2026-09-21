@@ -6,7 +6,7 @@ export interface ContextSections {
   all: KubernetesContext[];
 }
 
-/** Resolve names to contexts, in name order; unknown and duplicate names are dropped. */
+/** Resolve names to contexts, preserving the order of `names`; unknown and already-used names are skipped. */
 function resolve(names: string[], byName: Map<string, KubernetesContext>, used: Set<string>): KubernetesContext[] {
   const result: KubernetesContext[] = [];
   for (const name of names) {

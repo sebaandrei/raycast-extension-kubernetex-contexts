@@ -33,7 +33,7 @@ export interface ProductionMatcher {
   valid: boolean;
 }
 
-/** Pure with respect to the UI: reads the preference and builds a matcher, no side effects. */
+/** Builds a matcher from the current preference. Reads preferences but has no other side effects. */
 export function getProductionMatcher(): ProductionMatcher {
   const { regex, valid } = compileProductionPattern(getPreferences().productionPattern);
   return { isProduction: (contextName) => regex !== null && regex.test(contextName), valid };
@@ -41,7 +41,7 @@ export function getProductionMatcher(): ProductionMatcher {
 
 let invalidPatternReported = false;
 
-/** Tell the user once per command run that the pattern is invalid. Call from an effect or event handler, not render. */
+/** Tell the user once per process that the pattern is invalid. Call from an effect or event handler, not render. */
 export function reportInvalidPatternOnce(): void {
   if (invalidPatternReported) return;
   invalidPatternReported = true;

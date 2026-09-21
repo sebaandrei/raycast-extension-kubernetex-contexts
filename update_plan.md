@@ -1,5 +1,7 @@
 # Update Plan: Kubernetes Context Manager (2026)
 
+> Historical planning document. Where it differs from the README and the code, the README and code are authoritative (e.g. `aws` alone is not an EKS signal, `switchAndClose(perform, opts)` takes a perform callback, delete-unused is a separate action).
+
 Follow tasks in order, one at a time. Each task ends with the **Definition of done** checks and its own commit.
 
 ## Decisions (from planning Q&A)
